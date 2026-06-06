@@ -107,14 +107,14 @@ const initialBounties: Bounty[] = [
   },
   {
     id: "BNT-002",
-    title: "Create a Venice AI quickstart for community builders",
+    title: "Create an OpenAI bounty-review prompt for community builders",
     community: "AI Builders Guild",
-    resources: "https://docs.venice.ai/overview/about-venice",
+    resources: "https://platform.openai.com/docs/guides/structured-outputs",
     reward: 5,
     token: "USDC",
     status: "Submitted",
     learner: "0x42B...C77",
-    submission: "https://gist.github.com/learner/venice-quickstart",
+    submission: "https://gist.github.com/learner/openai-review-prompt",
   },
   {
     id: "BNT-003",
@@ -249,7 +249,7 @@ export default function Home() {
     setIsReviewing(true);
 
     try {
-      const response = await fetch("/api/venice/review", {
+      const response = await fetch("/api/openai/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -265,7 +265,7 @@ export default function Home() {
       const review = await response.json();
 
       if (!response.ok) {
-        throw new Error(review.error ?? "Venice review failed");
+        throw new Error(review.error ?? "OpenAI review failed");
       }
 
       setBounties((current) =>
@@ -283,10 +283,10 @@ export default function Home() {
             : bounty,
         ),
       );
-      messageApi.success("Venice review completed");
+      messageApi.success("OpenAI review completed");
     } catch (error) {
       messageApi.error(
-        error instanceof Error ? error.message : "Venice review failed",
+        error instanceof Error ? error.message : "OpenAI review failed",
       );
     } finally {
       setIsReviewing(false);
@@ -617,7 +617,7 @@ export default function Home() {
               SkillBounty Board
             </Title>
             <Paragraph className="!mb-0 max-w-3xl !text-base !text-slate-600">
-              Community task rewards with Venice AI review, MetaMask Smart
+              Community task rewards with OpenAI review, MetaMask Smart
               Account permissions, and 1Shot gas-abstracted payouts.
             </Paragraph>
           </div>
@@ -743,7 +743,7 @@ export default function Home() {
               <Space direction="vertical" size="large" className="w-full">
                 <Alert
                   message="Main demo flow"
-                  description="Learner submits work, Venice AI reviews it, the admin approves, then a MetaMask Smart Account sends the USDC reward through 1Shot."
+                  description="Learner submits work, OpenAI reviews it, the admin approves, then a MetaMask Smart Account sends the USDC reward through 1Shot."
                   type="info"
                   showIcon
                 />
@@ -784,7 +784,7 @@ export default function Home() {
 
                 <Row gutter={[16, 16]}>
                   <Col xs={24} md={12}>
-                    <Card size="small" title="Venice AI review">
+                    <Card size="small" title="OpenAI review">
                       <Space direction="vertical" className="w-full">
                         <Progress
                           percent={selectedBounty.aiScore ?? 0}
@@ -798,7 +798,7 @@ export default function Home() {
                         </Text>
                         <Paragraph className="!mb-0 !text-slate-600">
                           {selectedBounty.aiSummary ??
-                            "Run Venice review after a learner submits work."}
+                            "Run OpenAI review after a learner submits work."}
                         </Paragraph>
                         {selectedBounty.aiStrengths?.length ? (
                           <Text className="!text-slate-600">
@@ -811,7 +811,7 @@ export default function Home() {
                           </Text>
                         ) : null}
                         <Button loading={isReviewing} onClick={runAiReview}>
-                          Run Venice review
+                          Run OpenAI review
                         </Button>
                       </Space>
                     </Card>
@@ -893,7 +893,7 @@ export default function Home() {
                   {
                     color: "green",
                     children:
-                      "Venice: score the learner submission and return structured JSON for the admin.",
+                      "OpenAI: score the learner submission and return structured JSON for the admin.",
                   },
                   {
                     color: "blue",

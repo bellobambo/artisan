@@ -1,13 +1,13 @@
 # Artisan
 
-Artisan is a SkillBounty Board for learning communities. Admins post small tasks, learners submit proof of work, Venice AI reviews the submission, and approved rewards are paid from a MetaMask Smart Account through 1Shot gas abstraction.
+Artisan is a SkillBounty Board for learning communities. Admins post small tasks, learners submit proof of work, OpenAI reviews the submission, and approved rewards are paid from a MetaMask Smart Account through 1Shot gas abstraction.
 
 ## MVP Flow
 
 ```txt
 Create bounty
 -> Learner submits work
--> Venice AI scores and summarizes the submission
+-> OpenAI scores and summarizes the submission
 -> Admin approves the payout
 -> MetaMask Smart Account executes the USDC transfer
 -> 1Shot relays the ERC-7710 transaction
@@ -28,7 +28,7 @@ Open `http://localhost:3000`.
 - MetaMask browser extension with a funded test wallet.
 - Base Sepolia as the selected 1Shot-compatible test network.
 - Test USDC or another supported ERC-20 for demo rewards.
-- Venice AI API key from Venice.
+- OpenAI API key.
 - 1Shot relayer RPC/config from the 1Shot docs.
 - A public RPC URL for your selected network.
 - MongoDB Atlas or local MongoDB if you want persistent bounty data.
@@ -45,7 +45,7 @@ The current app is a local interactive prototype:
 
 - Bounty creation works in client state.
 - Learner submission works in client state.
-- Venice review calls the Venice API through `/api/venice/review`.
+- OpenAI review calls the OpenAI Responses API through `/api/openai/review`.
 - MetaMask wallet connection works through wagmi.
 - Advanced Permissions request uses `@metamask/smart-accounts-kit` and requests a capped ERC-20 USDC allowance permission.
 - 1Shot capability discovery and fee quote calls are wired through `/api/oneshot/capabilities` and `/api/oneshot/fee`.
@@ -68,7 +68,7 @@ Connect MetaMask
    - Uses the returned targetAddress as the execution-permission target.
    - Requests an ERC-20 USDC allowance permission through MetaMask Advanced Permissions.
 -> Submit learner work
--> Run Venice review
+-> Run OpenAI review
 -> Prepare 1Shot payout
    - Fetches 1Shot fee data.
    - Encodes USDC.transfer(learner, reward).
@@ -121,4 +121,5 @@ npm install mongodb
 - Delegation execution: https://docs.metamask.io/smart-accounts-kit/guides/delegation/execute-on-smart-accounts-behalf/
 - Advanced Permissions: https://docs.metamask.io/smart-accounts-kit/guides/advanced-permissions/execute-on-metamask-users-behalf/
 - 1Shot gas sponsorship: https://1shotapi.com/docs/quickstarts/gas-sponsorship-eip7710
-- Venice AI: https://docs.venice.ai/overview/about-venice
+- OpenAI Responses API: https://platform.openai.com/docs/api-reference/responses
+- OpenAI structured outputs: https://platform.openai.com/docs/guides/structured-outputs
