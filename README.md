@@ -1,12 +1,15 @@
 # Artisan
 
-Artisan is a SkillBounty Board for learning communities. Admins post small tasks, learners submit proof of work, OpenAI reviews the submission, and approved rewards are paid from a MetaMask Smart Account through 1Shot gas abstraction.
+Artisan is a SkillBounty Board for learning communities. Admins post small tasks, learners submit proof of work, pay for AI review through an x402-style `402 Payment Required` flow, and approved rewards are paid from a MetaMask Smart Account through 1Shot gas abstraction.
 
 ## MVP Flow
 
 ```txt
 Create bounty
 -> Learner submits work
+-> AI review endpoint returns 402 Payment Required
+-> MetaMask Advanced Permission authorizes the x402 review payment
+-> 1Shot relays the ERC-7710 payment transaction
 -> OpenAI scores and summarizes the submission
 -> Admin approves the payout
 -> MetaMask Smart Account executes the USDC transfer
@@ -30,6 +33,7 @@ Open `http://localhost:3000`.
 - Test USDC or another supported ERC-20 for demo rewards.
 - OpenAI API key.
 - 1Shot relayer RPC/config from the 1Shot docs.
+- x402 seller wallet address to receive paid AI review fees.
 - A public RPC URL for your selected network.
 - MongoDB Atlas or local MongoDB if you want persistent bounty data.
 
@@ -39,6 +43,13 @@ Copy `.env.example` to `.env.local` and fill the values you have:
 cp .env.example .env.local
 ```
 
+For the x402 review demo, set:
+
+```bash
+NEXT_PUBLIC_X402_SELLER_ADDRESS=0xYourSellerWallet
+NEXT_PUBLIC_X402_REVIEW_PRICE_USDC=0.01
+```
+
 ## Current State
 
 The current app is a local interactive prototype:
@@ -46,6 +57,7 @@ The current app is a local interactive prototype:
 - Bounty creation works in client state.
 - Learner submission works in client state.
 - OpenAI review calls the OpenAI Responses API through `/api/openai/review`.
+- `/api/openai/review` is x402-gated: the first request returns `402 Payment Required`, then the client pays the review fee and retries with an `X-Payment` proof.
 - MetaMask wallet connection works through wagmi.
 - Advanced Permissions request uses `@metamask/smart-accounts-kit` and requests a capped ERC-20 USDC allowance permission.
 - 1Shot capability discovery and fee quote calls are wired through `/api/oneshot/capabilities` and `/api/oneshot/fee`.
@@ -68,7 +80,12 @@ Connect MetaMask
    - Uses the returned targetAddress as the execution-permission target.
    - Requests an ERC-20 USDC allowance permission through MetaMask Advanced Permissions.
 -> Submit learner work
--> Run OpenAI review
+-> Run paid x402 OpenAI review
+   - Calls `/api/openai/review`.
+   - Receives `402 Payment Required` with the AI review price and seller address.
+   - Encodes a USDC payment to `NEXT_PUBLIC_X402_SELLER_ADDRESS`.
+   - Sends the payment through `relayer_send7710Transaction`.
+   - Retries `/api/openai/review` with `X-Payment: oneshot:<taskId>`.
 -> Prepare 1Shot payout
    - Fetches 1Shot fee data.
    - Encodes USDC.transfer(learner, reward).

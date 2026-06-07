@@ -7,6 +7,7 @@ type ReviewRequest = {
   reward?: number;
   learner?: string;
   submission?: string;
+  x402PaymentProof?: string;
 };
 
 type OpenAIResponse = {
@@ -87,6 +88,33 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Bounty title and submission are required." },
       { status: 400 },
+    );
+  }
+
+  const paymentProof =
+    body.x402PaymentProof ?? request.headers.get("x-payment") ?? undefined;
+
+  if (!paymentProof) {
+    return NextResponse.json(
+      {
+        error: "x402 payment required before AI review.",
+        x402: {
+          resource: "artisan.ai-review",
+          amount: process.env.NEXT_PUBLIC_X402_REVIEW_PRICE_USDC ?? "0.01",
+          asset: "USDC",
+          chainId: process.env.NEXT_PUBLIC_CHAIN_ID ?? "84532",
+          payTo: process.env.NEXT_PUBLIC_X402_SELLER_ADDRESS,
+          protocol: "x402",
+          settlement: "ERC-7710 via 1Shot",
+        },
+      },
+      {
+        status: 402,
+        headers: {
+          "X-402-Resource": "artisan.ai-review",
+          "X-402-Protocol": "x402",
+        },
+      },
     );
   }
 

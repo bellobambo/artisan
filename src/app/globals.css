@@ -1,14 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f7faf9;
-  --foreground: #17211f;
+  --background: #dddddd;
+  --foreground: #555555;
+  --artisan-primary: #eeeeee;
+  --artisan-gray: #dddddd;
+  --artisan-team: #443199;
+  --artisan-ink: #555555;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+  --font-sans: var(--font-montserrat), Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
   --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
@@ -16,10 +20,223 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+  font-family: var(--font-montserrat), Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
+  font-optical-sizing: auto;
 }
 
 * {
   box-sizing: border-box;
+}
+
+.artisan-shell {
+  background:
+    radial-gradient(circle at 24px 24px, rgba(68, 49, 153, 0.28) 0 7px, transparent 8px),
+    linear-gradient(135deg, rgba(238, 238, 238, 0.45) 0 2px, transparent 2px 28px);
+  background-color: var(--artisan-gray);
+  background-size: auto, 144px 144px, 144px 144px;
+}
+
+.artisan-card {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.artisan-muted-card {
+  background: var(--artisan-primary) !important;
+}
+
+.artisan-card .ant-card-head {
+  border-bottom-color: transparent !important;
+}
+
+.artisan-card .ant-card-head-title,
+.artisan-card .ant-statistic-title {
+  color: var(--artisan-ink);
+  font-weight: 700;
+}
+
+.artisan-card .ant-statistic-content {
+  color: var(--artisan-ink);
+  font-weight: 800;
+}
+
+.artisan-ghost-button {
+  border-color: var(--artisan-team) !important;
+  color: var(--artisan-ink) !important;
+  font-weight: 700;
+}
+
+.artisan-ghost-button:hover {
+  border-color: var(--artisan-team) !important;
+  color: var(--artisan-ink) !important;
+}
+
+.navbar-button,
+.navbar-button:hover,
+.navbar-button:focus,
+.navbar-button:active {
+  background: transparent !important;
+  border-color: #eeeeee !important;
+  color: #eeeeee !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 78px;
+  padding-inline: 16px !important;
+  border-radius: 6px !important;
+  line-height: 1.2 !important;
+}
+
+.navbar-button span,
+.navbar-button:hover span,
+.navbar-button:focus span,
+.navbar-button:active span {
+  color: #eeeeee !important;
+}
+
+.artisan-table .ant-table-thead > tr > th {
+  background: var(--artisan-primary) !important;
+  color: var(--artisan-ink) !important;
+  font-weight: 800;
+}
+
+.artisan-table .ant-table-tbody > tr.ant-table-row:hover > td {
+  background: rgba(68, 49, 153, 0.18) !important;
+}
+
+.ant-btn-primary {
+  background: var(--artisan-team) !important;
+  border-color: var(--artisan-team) !important;
+  color: #eeeeee !important;
+  font-weight: 700;
+}
+
+.ant-btn-primary span,
+.ant-btn-primary:hover span,
+.ant-btn-primary:focus span,
+.ant-btn-primary:active span {
+  color: #eeeeee !important;
+}
+
+.ant-btn {
+  min-height: 50px;
+  min-width: 124px;
+  padding-inline: 20px !important;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ant-btn-default {
+  background: var(--artisan-primary) !important;
+  border-color: var(--artisan-team) !important;
+  color: var(--artisan-ink) !important;
+}
+
+.ant-card,
+.ant-table,
+.ant-table-cell,
+.ant-drawer-content,
+.ant-drawer-header,
+.ant-drawer-body,
+.ant-input,
+.ant-input-number,
+.ant-input-number-input,
+.ant-select-selector,
+.ant-alert,
+.ant-steps-item-title,
+.ant-timeline-item-content {
+  background: var(--artisan-primary) !important;
+  color: var(--artisan-ink) !important;
+}
+
+.ant-card,
+.ant-table-cell,
+.ant-drawer-header,
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select-selector,
+.ant-alert {
+  border-color: var(--artisan-team) !important;
+}
+
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-select-selector {
+  min-height: 58px !important;
+  border-radius: 8px !important;
+  font-size: 16px !important;
+  min-width: 180px !important;
+}
+
+.ant-input-number-input,
+.ant-select-selection-item,
+.ant-select-selection-placeholder {
+  min-height: 56px !important;
+  line-height: 56px !important;
+  font-size: 16px !important;
+}
+
+.ant-input-affix-wrapper > input.ant-input {
+  min-height: 44px !important;
+}
+
+.ant-form-item-label > label {
+  color: var(--artisan-ink) !important;
+  font-size: 15px !important;
+  font-weight: 600;
+}
+
+.ant-input::placeholder,
+.ant-input textarea::placeholder,
+.ant-select-selection-placeholder {
+  color: var(--artisan-ink) !important;
+  opacity: 0.7;
+}
+
+.ant-select-multiple .ant-select-selection-item {
+  background: var(--artisan-team) !important;
+  border-color: var(--artisan-team) !important;
+  color: var(--artisan-ink) !important;
+}
+
+.bounty-card .ant-card-body {
+  display: flex;
+  min-height: 240px;
+  flex-direction: column;
+}
+
+.bounty-card .ant-card-body > :last-child {
+  margin-top: auto;
+}
+
+.ant-card.artisan-card {
+  border: 0 !important;
+}
+
+.ant-card.artisan-card .ant-card-head {
+  border-bottom: 1px solid var(--artisan-team) !important;
+}
+
+.ant-btn.navbar-button,
+.ant-btn.navbar-button:hover,
+.ant-btn.navbar-button:focus,
+.ant-btn.navbar-button:active {
+  background: transparent !important;
+  border-color: #eeeeee !important;
+  color: #eeeeee !important;
+}
+
+.ant-card.bounty-card,
+.ant-card.bounty-card.ant-card-bordered {
+  border: 0 !important;
+}
+
+.ant-btn.navbar-button > span,
+.ant-btn.navbar-button:hover > span,
+.ant-btn.navbar-button:focus > span,
+.ant-btn.navbar-button:active > span {
+  color: #eeeeee !important;
 }
