@@ -25,14 +25,14 @@ export function Providers({ children }: { children: ReactNode }) {
               colorBgElevated: "#eeeeee",
               colorBorder: "#443199",
               colorTextBase: "#555555",
-              colorTextLightSolid: "#555555",
+              colorTextLightSolid: "#ffffff",
               borderRadius: 8,
+              controlHeight: 32,
               fontFamily:
                 'var(--font-montserrat), Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
             },
             components: {
               Button: {
-                controlHeight: 42,
                 borderRadius: 8,
                 primaryShadow: "0 8px 18px rgba(68, 49, 153, 0.32)",
               },
@@ -43,7 +43,12 @@ export function Providers({ children }: { children: ReactNode }) {
               Progress: {
                 defaultColor: "#443199",
               },
+              Select: {
+                multipleItemHeight: 22,
+                multipleItemBg: "#443199",
+              },
               Tag: {
+                solidTextColor: "#ffffff",
                 borderRadiusSM: 6,
               },
             },

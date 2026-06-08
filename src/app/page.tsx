@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Spin,
   Alert,
   Button,
   Card,
@@ -20,6 +21,8 @@ import {
   Timeline,
   Typography,
 } from "antd";
+import type { SelectProps } from "antd";
+import { CloseOutlined } from "@ant-design/icons";
 import { erc7715ProviderActions } from "@metamask/smart-accounts-kit/actions";
 import toast from "react-hot-toast";
 import { useEffect, useMemo, useState } from "react";
@@ -479,15 +482,15 @@ export default function Home() {
   const isSelectedBountyPaid = selectedBounty?.status === "Paid";
   const isSelectedBountyCreator = Boolean(
     selectedBounty?.creator &&
-      connectedWallet &&
-      selectedBounty.creator.toLowerCase() === connectedWallet,
+    connectedWallet &&
+    selectedBounty.creator.toLowerCase() === connectedWallet,
   );
   const isSelectedBountyManageable =
     Boolean(selectedBounty) && isSelectedBountyCreator && !isSelectedBountyPaid;
   const [defaultDeadlineInput] = useState(() =>
-      toDateTimeInputValue(
-        new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(),
-      ),
+    toDateTimeInputValue(
+      new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(),
+    ),
   );
 
   useEffect(() => {
@@ -602,8 +605,8 @@ export default function Home() {
   function isBountyCreator(bounty: Bounty) {
     return Boolean(
       bounty.creator &&
-        connectedWallet &&
-        bounty.creator.toLowerCase() === connectedWallet,
+      connectedWallet &&
+      bounty.creator.toLowerCase() === connectedWallet,
     );
   }
 
@@ -700,7 +703,7 @@ export default function Home() {
       setBounties((current) => [createdBounty, ...current]);
       setSelectedId(createdBounty.id);
       setIsDetailDrawerOpen(true);
-      toast.success("Bounty created in MongoDB");
+      toast.success("Bounty created");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to create bounty",
@@ -749,16 +752,16 @@ export default function Home() {
         current.map((bounty) =>
           bounty.id === selectedBounty.id
             ? {
-                ...bounty,
-                learner: result.bounty?.learner ?? values.learner,
-                submission: result.bounty?.submission ?? values.submission,
-                submissions: [...bounty.submissions, result.submission as BountySubmission],
-                status: "Reviewing",
-              }
+              ...bounty,
+              learner: result.bounty?.learner ?? values.learner,
+              submission: result.bounty?.submission ?? values.submission,
+              submissions: [...bounty.submissions, result.submission as BountySubmission],
+              status: "Reviewing",
+            }
             : bounty,
         ),
       );
-      toast.success("Submission recorded in MongoDB");
+      toast.success("Submission recorded");
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to record submission",
@@ -859,9 +862,9 @@ export default function Home() {
         current.map((bounty) =>
           bounty.id === selectedBounty.id
             ? {
-                ...bounty,
-                ...reviewPaymentPatch,
-              }
+              ...bounty,
+              ...reviewPaymentPatch,
+            }
             : bounty,
         ),
       );
@@ -967,9 +970,9 @@ export default function Home() {
         current.map((bounty) =>
           bounty.id === selectedBounty.id
             ? {
-                ...bounty,
-                ...reviewPatch,
-              }
+              ...bounty,
+              ...reviewPatch,
+            }
             : bounty,
         ),
       );
@@ -1086,15 +1089,15 @@ export default function Home() {
       current.map((bounty) =>
         bounty.id === selectedBounty.id
           ? {
-              ...bounty,
-              submissions: nextSubmissions,
-              relayStatus: bounty.relayTaskId
-                ? "Payout selection changed. Prepare payouts again before submitting."
-                : bounty.relayStatus,
-              relayTaskId: "",
-              relayCalldata: null,
-              relayCalldatas: [],
-            }
+            ...bounty,
+            submissions: nextSubmissions,
+            relayStatus: bounty.relayTaskId
+              ? "Payout selection changed. Prepare payouts again before submitting."
+              : bounty.relayStatus,
+            relayTaskId: "",
+            relayCalldata: null,
+            relayCalldatas: [],
+          }
           : bounty,
       ),
     );
@@ -1328,9 +1331,9 @@ export default function Home() {
         current.map((bounty) =>
           bounty.id === selectedBounty.id
             ? {
-                ...bounty,
-                ...payoutPreparationPatch,
-              }
+              ...bounty,
+              ...payoutPreparationPatch,
+            }
             : bounty,
         ),
       );
@@ -1366,9 +1369,9 @@ export default function Home() {
       current.map((bounty) =>
         bounty.id === selectedBounty.id
           ? {
-              ...bounty,
-              ...endPatch,
-            }
+            ...bounty,
+            ...endPatch,
+          }
           : bounty,
       ),
     );
@@ -1465,9 +1468,9 @@ export default function Home() {
         current.map((bounty) =>
           bounty.id === selectedBounty.id
             ? {
-                ...bounty,
-                ...relaySubmitPatch,
-              }
+              ...bounty,
+              ...relaySubmitPatch,
+            }
             : bounty,
         ),
       );
@@ -1545,9 +1548,9 @@ export default function Home() {
         current.map((bounty) =>
           bounty.id === selectedBounty.id
             ? {
-                ...bounty,
-                ...relayStatusPatch,
-              }
+              ...bounty,
+              ...relayStatusPatch,
+            }
             : bounty,
         ),
       );
@@ -1593,8 +1596,43 @@ export default function Home() {
     }
   }
 
+  const communityTagRender: SelectProps["tagRender"] = (props) => {
+    const { label, closable, onClose } = props;
+    const onPreventMouseDown = (event: React.MouseEvent<HTMLSpanElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    return (
+      <Tag
+        closeIcon={<CloseOutlined />}
+        onMouseDown={onPreventMouseDown}
+        closable={closable}
+        onClose={onClose}
+        style={{
+          backgroundColor: "#443199",
+          color: "white",
+          marginInlineEnd: 4,
+          padding: "8px 12px",
+          fontSize: "14px",
+        }}
+      >
+        {label}
+      </Tag>
+    );
+  };
+
   return (
     <main className="artisan-shell min-h-screen text-[#555555]">
+      {/*
+        This style override is necessary to prevent Ant Design's Select component
+        from graying out disabled options when maxCount is reached. This ensures
+        all options in the list remain readable.
+      */}
+      <style>{`
+        .ant-select-item-option-disabled .ant-select-item-option-content {
+          color: #555555 !important;
+        }
+      `}</style>
       <div className="sticky top-0 z-20 border-b border-[#443199] bg-[#443199] px-4 py-3 shadow-sm sm:px-6 lg:px-8">
         <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-3">
           <Button className="navbar-button !font-extrabold" style={navbarButtonStyle}>
@@ -1672,110 +1710,113 @@ export default function Home() {
             </Button>
           </Space>
         </div>
-
-        <section className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <Title level={2} className="!m-0 !text-2xl !text-[#555555]">
-                Community bounties
-              </Title>
-              <Text className="!text-[#555555]">
-                {isLoadingBounties
-                  ? "Loading records from MongoDB"
-                  : `${bounties.length} active records`}
-              </Text>
-            </div>
+        {isLoadingBounties ? (
+          <div className="flex items-center justify-center pt-20">
+            <Spin size="large" />
           </div>
+        ) : (
+          <section className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <Title level={2} className="!m-0 !text-2xl !text-[#555555]">
+                  Community bounties
+                </Title>
+                <Text className="!text-[#555555]">
+                  {`${bounties.length} active records`}
+                </Text>
+              </div>
+            </div>
 
-          <Row gutter={[16, 16]} justify="start">
-            {bounties.map((bounty) => (
-              <Col key={bounty.id} xs={24} sm={12} lg={8} xl={8}>
-                <Card
-                  bordered={false}
-                  className="artisan-card artisan-muted-card bounty-card h-full"
-                  extra={
-                    <Tag color={statusColor(getLifecycleLabel(bounty))}>
-                      {getLifecycleLabel(bounty)}
-                    </Tag>
-                  }
-                  title={bounty.id}
-                >
-                  <button
-                    className="mb-4 block w-full text-left"
-                    onClick={() =>
-                      openBounty(
-                        bounty.id,
-                        isBountyCreator(bounty) ? "review" : "open",
-                      )
+            <Row gutter={[16, 16]} justify="start">
+              {bounties.map((bounty) => (
+                <Col key={bounty.id} xs={24} sm={12} lg={8} xl={8}>
+                  <Card
+                    bordered={false}
+                    className="artisan-card artisan-muted-card bounty-card h-full"
+                    extra={
+                      <Tag color={statusColor(getLifecycleLabel(bounty))}>
+                        {getLifecycleLabel(bounty)}
+                      </Tag>
                     }
-                    type="button"
+                    title={bounty.id}
                   >
-                    <Text className="block text-sm font-extrabold !text-[#555555]">
-                      {bounty.title}
-                    </Text>
-                    <Text className="block pt-1 text-xs !text-[#555555] opacity-75">
-                      {bounty.community}
-                    </Text>
-                  </button>
-
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                    <div>
-                      <Text className="block text-xs !text-[#555555] opacity-75">
-                        Price
-                      </Text>
-                      <Text strong className="!text-[#555555]">
-                        {bounty.reward} {bounty.token}
-                      </Text>
-                    </div>
-                    <div className="text-right">
-                      <Text className="block text-xs !text-[#555555] opacity-75">
-                        Participants
-                      </Text>
-                      <Text strong className="!text-[#555555]">
-                        {bounty.submissions.length}/{bounty.participantLimit}
-                      </Text>
-                    </div>
-                    <div>
-                      <Text className="block text-xs !text-[#555555] opacity-75">
-                        Deadline
-                      </Text>
-                      <Text strong className="!text-[#555555]">
-                        {formatDateTime(bounty.deadlineAt)}
-                      </Text>
-                    </div>
-                    <div className="text-right">
-                      <Text className="block text-xs !text-[#555555] opacity-75">
-                        Payout
-                      </Text>
-                      <Text strong className="!text-[#555555]">
-                        {bounty.payoutMode}
-                      </Text>
-                    </div>
-                  </div>
-
-                  <Divider className="!my-3 !border-[#443199]/80" />
-
-                  <div className="flex justify-end gap-2">
-                    {!isBountyCreator(bounty) ? (
-                      <Button
-                        className="artisan-ghost-button"
-                        onClick={() => openBounty(bounty.id, "open")}
-                      >
-                        Open
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="primary"
-                      onClick={() => openBounty(bounty.id, "review")}
+                    <button
+                      className="mb-4 block w-full text-left"
+                      onClick={() =>
+                        openBounty(
+                          bounty.id,
+                          isBountyCreator(bounty) ? "review" : "open",
+                        )
+                      }
+                      type="button"
                     >
-                      Review
-                    </Button>
-                  </div>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        </section>
+                      <Text className="block text-sm font-extrabold !text-[#555555]">
+                        {bounty.title}
+                      </Text>
+                      <Text className="block pt-1 text-xs !text-[#555555] opacity-75">
+                        {bounty.community}
+                      </Text>
+                    </button>
+
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                      <div>
+                        <Text className="block text-xs !text-[#555555] opacity-75">
+                          Price
+                        </Text>
+                        <Text strong className="!text-[#555555]">
+                          {bounty.reward} {bounty.token}
+                        </Text>
+                      </div>
+                      <div className="text-right">
+                        <Text className="block text-xs !text-[#555555] opacity-75">
+                          Participants
+                        </Text>
+                        <Text strong className="!text-[#555555]">
+                          {bounty.submissions.length}/{bounty.participantLimit}
+                        </Text>
+                      </div>
+                      <div>
+                        <Text className="block text-xs !text-[#555555] opacity-75">
+                          Deadline
+                        </Text>
+                        <Text strong className="!text-[#555555]">
+                          {formatDateTime(bounty.deadlineAt)}
+                        </Text>
+                      </div>
+                      <div className="text-right">
+                        <Text className="block text-xs !text-[#555555] opacity-75">
+                          Payout
+                        </Text>
+                        <Text strong className="!text-[#555555]">
+                          {bounty.payoutMode}
+                        </Text>
+                      </div>
+                    </div>
+
+                    <Divider className="!my-3 !border-[#443199]/80" />
+
+                    <div className="flex justify-end gap-2">
+                      {!isBountyCreator(bounty) ? (
+                        <Button
+                          className="artisan-ghost-button"
+                          onClick={() => openBounty(bounty.id, "open")}
+                        >
+                          Open
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="primary"
+                        onClick={() => openBounty(bounty.id, "review")}
+                      >
+                        Review
+                      </Button>
+                    </div>
+                  </Card>
+                </Col>
+              ))}
+            </Row>
+          </section>
+        )}
       </div>
 
       <Drawer
@@ -1822,9 +1863,11 @@ export default function Home() {
           >
             <Select
               maxCount={1}
+              popupStyle={{ zIndex: 1060 }}
               mode="tags"
               options={communityOptions}
               placeholder="Select or type a community"
+              tagRender={communityTagRender}
             />
           </Form.Item>
           <Row gutter={12}>
@@ -1940,411 +1983,411 @@ export default function Home() {
         }
       >
         {selectedBounty ? (
-        <Space direction="vertical" size="large" className="w-full">
-          {detailDrawerMode === "open" ? (
-            <>
-          <Alert
-            message="Bounty lifecycle"
-            description="Users submit before the deadline, AI reviews and ranks submissions during the review period, then funds can be released manually or queued for delegated smart-account disbursement."
-            type="info"
-            showIcon
-          />
+          <Space direction="vertical" size="large" className="w-full">
+            {detailDrawerMode === "open" ? (
+              <>
+                <Alert
+                  message="Bounty lifecycle"
+                  description="Users submit before the deadline, AI reviews and ranks submissions during the review period, then funds can be released manually or queued for delegated smart-account disbursement."
+                  type="info"
+                  showIcon
+                />
 
-          <Row gutter={[12, 12]}>
-            <Col xs={24} md={8}>
-              <Card className="artisan-muted-card" size="small">
-                <Statistic title="Price" suffix={selectedBounty.token} value={selectedBounty.reward} />
-              </Card>
-            </Col>
-            <Col xs={24} md={8}>
-              <Card className="artisan-muted-card" size="small">
-                <Statistic title="Submissions" suffix={`/ ${selectedBounty.participantLimit}`} value={selectedBounty.submissions.length} />
-              </Card>
-            </Col>
-            <Col xs={24} md={8}>
-              <Card className="artisan-muted-card" size="small">
-                <Statistic title="Review days" value={selectedBounty.reviewPeriodDays} />
-              </Card>
-            </Col>
-          </Row>
+                <Row gutter={[12, 12]}>
+                  <Col xs={24} md={8}>
+                    <Card className="artisan-muted-card" size="small">
+                      <Statistic title="Price" suffix={selectedBounty.token} value={selectedBounty.reward} />
+                    </Card>
+                  </Col>
+                  <Col xs={24} md={8}>
+                    <Card className="artisan-muted-card" size="small">
+                      <Statistic title="Submissions" suffix={`/ ${selectedBounty.participantLimit}`} value={selectedBounty.submissions.length} />
+                    </Card>
+                  </Col>
+                  <Col xs={24} md={8}>
+                    <Card className="artisan-muted-card" size="small">
+                      <Statistic title="Review days" value={selectedBounty.reviewPeriodDays} />
+                    </Card>
+                  </Col>
+                </Row>
 
-          <Card className="artisan-muted-card" size="small" title="Bounty details">
-            <Space direction="vertical" className="w-full">
-              <Paragraph className="!mb-0 !text-[#555555]">
-                {selectedBounty.description}
-              </Paragraph>
-              <Text className="!text-[#555555]">
-                Deadline: <Text strong>{formatDateTime(selectedBounty.deadlineAt)}</Text>
-              </Text>
-              <Text className="!text-[#555555]">
-                Review ends:{" "}
-                <Text strong>{formatDateTime(getReviewEndsAt(selectedBounty).toISOString())}</Text>
-              </Text>
-              <Text className="!text-[#555555]">
-                Payout rule: <Text strong>{selectedBounty.payoutMode}</Text>
-              </Text>
-              <Text className="!text-[#555555]">
-                Creator: <Text strong>{selectedBounty.creator ?? "Connected wallet"}</Text>
-              </Text>
-            </Space>
-          </Card>
+                <Card className="artisan-muted-card" size="small" title="Bounty details">
+                  <Space direction="vertical" className="w-full">
+                    <Paragraph className="!mb-0 !text-[#555555]">
+                      {selectedBounty.description}
+                    </Paragraph>
+                    <Text className="!text-[#555555]">
+                      Deadline: <Text strong>{formatDateTime(selectedBounty.deadlineAt)}</Text>
+                    </Text>
+                    <Text className="!text-[#555555]">
+                      Review ends:{" "}
+                      <Text strong>{formatDateTime(getReviewEndsAt(selectedBounty).toISOString())}</Text>
+                    </Text>
+                    <Text className="!text-[#555555]">
+                      Payout rule: <Text strong>{selectedBounty.payoutMode}</Text>
+                    </Text>
+                    <Text className="!text-[#555555]">
+                      Creator: <Text strong>{selectedBounty.creator ?? "Connected wallet"}</Text>
+                    </Text>
+                  </Space>
+                </Card>
 
-          {selectedBounty.resources ? (
-            <Card className="artisan-muted-card" size="small" title="Bounty resources">
-              <Paragraph className="!mb-0 whitespace-pre-line !text-[#555555]">
-                {selectedBounty.resources}
-              </Paragraph>
-            </Card>
-          ) : null}
+                {selectedBounty.resources ? (
+                  <Card className="artisan-muted-card" size="small" title="Bounty resources">
+                    <Paragraph className="!mb-0 whitespace-pre-line !text-[#555555]">
+                      {selectedBounty.resources}
+                    </Paragraph>
+                  </Card>
+                ) : null}
 
-          <Card className="artisan-muted-card" size="small" title="Submit to bounty">
-            <Form key={selectedBounty.id} layout="vertical" onFinish={submitWork}>
-              <Row gutter={12}>
-                <Col xs={24} md={10}>
-                  <Form.Item
-                    label="Learner wallet"
-                    name="learner"
-                    initialValue={selectedBounty.learner}
-                    rules={[{ required: true, message: "Add learner wallet" }]}
-                  >
-                    <Input placeholder="0x..." />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} md={14}>
-                  <Form.Item
-                    label="Submission link"
-                    name="submission"
-                    initialValue={selectedBounty.submission}
-                    rules={[{ required: true, message: "Add proof link" }]}
-                  >
-                    <Input placeholder="GitHub, demo, article, or video URL" />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Button
-                className="artisan-ghost-button"
-                disabled={
-                  isSubmittingWork ||
-                  isBountyEnded(selectedBounty) ||
-                  selectedBounty.submissions.length >= selectedBounty.participantLimit
-                }
-                htmlType="submit"
-                loading={isSubmittingWork}
-              >
-                Submit work
-              </Button>
-            </Form>
-          </Card>
-            </>
-          ) : (
-            <>
-              <Alert
-                message="Review workflow"
-                description={
-                  isSelectedBountyPaid
-                    ? "This bounty is paid and closed."
-                    : isSelectedBountyCreator
-                      ? "The review action pays the x402 fee first, then runs AI review with the returned payment proof. Payout preparation sends all ranked bounty rewards."
-                      : "Only the bounty creator can run review and disbursement."
-                }
-                type="info"
-                showIcon
-              />
-              <Card className="artisan-muted-card" size="small" title="AI ranking">
-                <Space direction="vertical" className="w-full">
-                  {getSortedSubmissions(selectedBounty).length ? (
-                    getSortedSubmissions(selectedBounty).map((submission, index) => (
-                      <div
-                        className="rounded-md border border-[#443199] p-3"
-                        key={submission.id}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex min-w-0 gap-3">
-                            <Checkbox
-                              checked={Boolean(submission.selectedForPayout)}
-                              disabled={
-                                !isSelectedBountyManageable ||
-                                typeof submission.aiScore !== "number"
-                              }
-                              onChange={(event) =>
-                                void toggleSubmissionPayoutSelection(
-                                  submission.id,
-                                  event.target.checked,
-                                )
-                              }
-                            />
-                            <div className="min-w-0">
-                              <Text strong className="block !text-[#555555]">
-                                #{submission.rank ?? index + 1} {submission.learner}
-                              </Text>
-                              <a
-                                className="block truncate text-xs !text-[#443199] underline"
-                                href={submission.link}
-                                rel="noreferrer"
-                                target="_blank"
-                                title={submission.link}
-                              >
-                                {formatSubmissionLink(submission.link)}
-                              </a>
+                <Card className="artisan-muted-card" size="small" title="Submit to bounty">
+                  <Form key={selectedBounty.id} layout="vertical" onFinish={submitWork}>
+                    <Row gutter={12}>
+                      <Col xs={24} md={10}>
+                        <Form.Item
+                          label="Learner wallet"
+                          name="learner"
+                          initialValue={selectedBounty.learner}
+                          rules={[{ required: true, message: "Add learner wallet" }]}
+                        >
+                          <Input placeholder="0x..." />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} md={14}>
+                        <Form.Item
+                          label="Submission link"
+                          name="submission"
+                          initialValue={selectedBounty.submission}
+                          rules={[{ required: true, message: "Add proof link" }]}
+                        >
+                          <Input placeholder="GitHub, demo, article, or video URL" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    <Button
+                      className="artisan-ghost-button"
+                      disabled={
+                        isSubmittingWork ||
+                        isBountyEnded(selectedBounty) ||
+                        selectedBounty.submissions.length >= selectedBounty.participantLimit
+                      }
+                      htmlType="submit"
+                      loading={isSubmittingWork}
+                    >
+                      Submit work
+                    </Button>
+                  </Form>
+                </Card>
+              </>
+            ) : (
+              <>
+                <Alert
+                  message="Review workflow"
+                  description={
+                    isSelectedBountyPaid
+                      ? "This bounty is paid and closed."
+                      : isSelectedBountyCreator
+                        ? "The review action pays the x402 fee first, then runs AI review with the returned payment proof. Payout preparation sends all ranked bounty rewards."
+                        : "Only the bounty creator can run review and disbursement."
+                  }
+                  type="info"
+                  showIcon
+                />
+                <Card className="artisan-muted-card" size="small" title="AI ranking">
+                  <Space direction="vertical" className="w-full">
+                    {getSortedSubmissions(selectedBounty).length ? (
+                      getSortedSubmissions(selectedBounty).map((submission, index) => (
+                        <div
+                          className="rounded-md border border-[#443199] p-3"
+                          key={submission.id}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex min-w-0 gap-3">
+                              <Checkbox
+                                checked={Boolean(submission.selectedForPayout)}
+                                disabled={
+                                  !isSelectedBountyManageable ||
+                                  typeof submission.aiScore !== "number"
+                                }
+                                onChange={(event) =>
+                                  void toggleSubmissionPayoutSelection(
+                                    submission.id,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              <div className="min-w-0">
+                                <Text strong className="block !text-[#555555]">
+                                  #{submission.rank ?? index + 1} {submission.learner}
+                                </Text>
+                                <a
+                                  className="block truncate text-xs !text-[#443199] underline"
+                                  href={submission.link}
+                                  rel="noreferrer"
+                                  target="_blank"
+                                  title={submission.link}
+                                >
+                                  {formatSubmissionLink(submission.link)}
+                                </a>
+                              </div>
                             </div>
+                            <Text strong className="shrink-0 whitespace-nowrap !text-[#555555]">
+                              {typeof submission.aiScore === "number"
+                                ? `${submission.aiScore}%`
+                                : "Pending"}
+                            </Text>
                           </div>
-                          <Text strong className="shrink-0 whitespace-nowrap !text-[#555555]">
-                            {typeof submission.aiScore === "number"
-                              ? `${submission.aiScore}%`
-                              : "Pending"}
+                          <Text className="block pt-2 !text-[#555555]">
+                            Recommendation:{" "}
+                            <Text strong>
+                              {submission.aiRecommendation ?? "Not reviewed"}
+                            </Text>
+                          </Text>
+                          {submission.aiSummary ? (
+                            <Paragraph className="!mb-0 !pt-2 !text-sm !text-[#555555]">
+                              {submission.aiSummary}
+                            </Paragraph>
+                          ) : null}
+                          {submission.aiStrengths?.length ? (
+                            <Text className="block pt-2 text-xs !text-[#555555] opacity-80">
+                              Strengths: {submission.aiStrengths.join(", ")}
+                            </Text>
+                          ) : null}
+                          {submission.aiIssues?.length ? (
+                            <Text className="block pt-1 text-xs !text-[#555555] opacity-80">
+                              Issues: {submission.aiIssues.join(", ")}
+                            </Text>
+                          ) : null}
+                        </div>
+                      ))
+                    ) : (
+                      <Text className="!text-[#555555]">No submissions yet</Text>
+                    )}
+                    {isSelectedBountyPaid ? null : (
+                      <>
+                        <Divider className="!my-2 !border-[#443199]/80" />
+                        <Text className="!text-[#555555]">
+                          Review payment:{" "}
+                          <Text strong>
+                            {selectedBounty.x402ReviewStatus ??
+                              `${x402ReviewPriceUsdc} USDC unpaid`}
+                          </Text>
+                        </Text>
+                        <Steps
+                          current={getReviewFlowStepIndex(reviewFlowStep)}
+                          direction="vertical"
+                          items={[
+                            {
+                              title: "Quote fee",
+                              description: "Fetch 1Shot fee and supported token.",
+                              status: getReviewFlowItemStatus(0, reviewFlowStep),
+                            },
+                            {
+                              title: "Relay payment",
+                              description: "Send x402 fee payment through 1Shot.",
+                              status: getReviewFlowItemStatus(1, reviewFlowStep),
+                            },
+                            {
+                              title: "Payment proof",
+                              description: "Store X-Payment proof for the review request.",
+                              status: getReviewFlowItemStatus(2, reviewFlowStep),
+                            },
+                            {
+                              title: "AI review",
+                              description: "Review every submission with OpenAI.",
+                              status: getReviewFlowItemStatus(3, reviewFlowStep),
+                            },
+                            {
+                              title: "Ranking",
+                              description: "Sort submissions and update scores.",
+                              status: getReviewFlowItemStatus(4, reviewFlowStep),
+                            },
+                          ]}
+                        />
+                        <Button
+                          disabled={
+                            !isSelectedBountyManageable ||
+                            !selectedBounty.submissions.length
+                          }
+                          loading={isPayingX402 || isReviewing}
+                          onClick={payAndRunAiReview}
+                          type="primary"
+                        >
+                          Pay review fee and run AI review
+                        </Button>
+                      </>
+                    )}
+                  </Space>
+                </Card>
+
+                <Card className="artisan-muted-card" size="small" title="Disbursement">
+                  <Space direction="vertical" className="w-full">
+                    <Text>
+                      Deadline:{" "}
+                      <Text strong>
+                        {isSelectedBountyPaid
+                          ? "Closed"
+                          : isBountyEnded(selectedBounty)
+                            ? "Ended"
+                            : "Open"}
+                      </Text>
+                    </Text>
+                    <Text>
+                      Review window:{" "}
+                      <Text strong>
+                        {isSelectedBountyPaid
+                          ? "Closed"
+                          : isReviewPeriodDone(selectedBounty)
+                            ? "Complete"
+                            : "Active"}
+                      </Text>
+                    </Text>
+                    <Text>
+                      Delegation:{" "}
+                      <Text strong>
+                        {isSelectedBountyPaid
+                          ? "Inactive"
+                          : isSmartPermissionActive
+                            ? "Active"
+                            : "Not granted"}
+                      </Text>
+                    </Text>
+                    <Text>
+                      Funding source:{" "}
+                      <Text strong>
+                        Creator smart account USDC balance
+                      </Text>
+                    </Text>
+                    <Divider className="!my-2 !border-[#443199]/80" />
+                    {getPayoutRows(selectedBounty).length ? (
+                      getPayoutRows(selectedBounty).map((row) => (
+                        <div
+                          className="flex items-center justify-between gap-3"
+                          key={row.submission.id}
+                        >
+                          <Text className="!text-[#555555]">
+                            #{row.rank} {row.submission.learner}
+                          </Text>
+                          <Text strong className="!text-[#555555]">
+                            {row.amount.toFixed(2)} {selectedBounty.token}
                           </Text>
                         </div>
-                        <Text className="block pt-2 !text-[#555555]">
-                          Recommendation:{" "}
-                          <Text strong>
-                            {submission.aiRecommendation ?? "Not reviewed"}
-                          </Text>
-                        </Text>
-                        {submission.aiSummary ? (
-                          <Paragraph className="!mb-0 !pt-2 !text-sm !text-[#555555]">
-                            {submission.aiSummary}
-                          </Paragraph>
-                        ) : null}
-                        {submission.aiStrengths?.length ? (
-                          <Text className="block pt-2 text-xs !text-[#555555] opacity-80">
-                            Strengths: {submission.aiStrengths.join(", ")}
-                          </Text>
-                        ) : null}
-                        {submission.aiIssues?.length ? (
-                          <Text className="block pt-1 text-xs !text-[#555555] opacity-80">
-                            Issues: {submission.aiIssues.join(", ")}
-                          </Text>
-                        ) : null}
-                      </div>
-                    ))
-                  ) : (
-                    <Text className="!text-[#555555]">No submissions yet</Text>
-                  )}
-                  {isSelectedBountyPaid ? null : (
-                    <>
-                      <Divider className="!my-2 !border-[#443199]/80" />
+                      ))
+                    ) : (
                       <Text className="!text-[#555555]">
-                        Review payment:{" "}
-                        <Text strong>
-                          {selectedBounty.x402ReviewStatus ??
-                            `${x402ReviewPriceUsdc} USDC unpaid`}
-                        </Text>
+                        Payouts appear after submissions are reviewed.
                       </Text>
-                      <Steps
-                        current={getReviewFlowStepIndex(reviewFlowStep)}
-                        direction="vertical"
-                        items={[
-                          {
-                            title: "Quote fee",
-                            description: "Fetch 1Shot fee and supported token.",
-                            status: getReviewFlowItemStatus(0, reviewFlowStep),
-                          },
-                          {
-                            title: "Relay payment",
-                            description: "Send x402 fee payment through 1Shot.",
-                            status: getReviewFlowItemStatus(1, reviewFlowStep),
-                          },
-                          {
-                            title: "Payment proof",
-                            description: "Store X-Payment proof for the review request.",
-                            status: getReviewFlowItemStatus(2, reviewFlowStep),
-                          },
-                          {
-                            title: "AI review",
-                            description: "Review every submission with OpenAI.",
-                            status: getReviewFlowItemStatus(3, reviewFlowStep),
-                          },
-                          {
-                            title: "Ranking",
-                            description: "Sort submissions and update scores.",
-                            status: getReviewFlowItemStatus(4, reviewFlowStep),
-                          },
-                        ]}
-                      />
+                    )}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        className="artisan-ghost-button"
+                        disabled={!isSelectedBountyManageable || isBountyEnded(selectedBounty)}
+                        onClick={endBountyManually}
+                      >
+                        End bounty manually
+                      </Button>
                       <Button
                         disabled={
                           !isSelectedBountyManageable ||
-                          !selectedBounty.submissions.length
+                          !isSmartPermissionActive ||
+                          !getPayoutRows(selectedBounty).length
                         }
-                        loading={isPayingX402 || isReviewing}
-                        onClick={payAndRunAiReview}
+                        loading={isPreparingRelay || isSubmittingRelay}
+                        onClick={prepareAndSubmitRelayTransaction}
                         type="primary"
                       >
-                        Pay review fee and run AI review
+                        Initiate payout via 1Shot
                       </Button>
-                    </>
-                  )}
-                </Space>
-              </Card>
-
-              <Card className="artisan-muted-card" size="small" title="Disbursement">
-                <Space direction="vertical" className="w-full">
-                  <Text>
-                    Deadline:{" "}
-                    <Text strong>
-                      {isSelectedBountyPaid
-                        ? "Closed"
-                        : isBountyEnded(selectedBounty)
-                          ? "Ended"
-                          : "Open"}
-                    </Text>
-                  </Text>
-                  <Text>
-                    Review window:{" "}
-                    <Text strong>
-                      {isSelectedBountyPaid
-                        ? "Closed"
-                        : isReviewPeriodDone(selectedBounty)
-                          ? "Complete"
-                          : "Active"}
-                    </Text>
-                  </Text>
-                  <Text>
-                    Delegation:{" "}
-                    <Text strong>
-                      {isSelectedBountyPaid
-                        ? "Inactive"
-                        : isSmartPermissionActive
-                          ? "Active"
-                          : "Not granted"}
-                    </Text>
-                  </Text>
-                  <Text>
-                    Funding source:{" "}
-                    <Text strong>
-                      Creator smart account USDC balance
-                    </Text>
-                  </Text>
-                  <Divider className="!my-2 !border-[#443199]/80" />
-                  {getPayoutRows(selectedBounty).length ? (
-                    getPayoutRows(selectedBounty).map((row) => (
-                      <div
-                        className="flex items-center justify-between gap-3"
-                        key={row.submission.id}
+                      <Button
+                        disabled={
+                          isSelectedBountyPaid ||
+                          !isSelectedBountyCreator ||
+                          !selectedBounty.relayTaskId
+                        }
+                        loading={isCheckingRelay}
+                        onClick={checkRelayStatus}
+                        className="artisan-ghost-button"
                       >
-                        <Text className="!text-[#555555]">
-                          #{row.rank} {row.submission.learner}
-                        </Text>
-                        <Text strong className="!text-[#555555]">
-                          {row.amount.toFixed(2)} {selectedBounty.token}
-                        </Text>
-                      </div>
-                    ))
-                  ) : (
+                        Check relay status
+                      </Button>
+                    </div>
                     <Text className="!text-[#555555]">
-                      Payouts appear after submissions are reviewed.
+                      Relay: <Text strong>{selectedBounty.relayStatus ?? "Not prepared"}</Text>
                     </Text>
-                  )}
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      className="artisan-ghost-button"
-                      disabled={!isSelectedBountyManageable || isBountyEnded(selectedBounty)}
-                      onClick={endBountyManually}
-                    >
-                      End bounty manually
-                    </Button>
-                    <Button
-                      disabled={
-                        !isSelectedBountyManageable ||
-                        !isSmartPermissionActive ||
-                        !getPayoutRows(selectedBounty).length
-                      }
-                      loading={isPreparingRelay || isSubmittingRelay}
-                      onClick={prepareAndSubmitRelayTransaction}
-                      type="primary"
-                    >
-                      Initiate payout via 1Shot
-                    </Button>
-                    <Button
-                      disabled={
-                        isSelectedBountyPaid ||
-                        !isSelectedBountyCreator ||
-                        !selectedBounty.relayTaskId
-                      }
-                      loading={isCheckingRelay}
-                      onClick={checkRelayStatus}
-                      className="artisan-ghost-button"
-                    >
-                      Check relay status
-                    </Button>
-                  </div>
-                  <Text className="!text-[#555555]">
-                    Relay: <Text strong>{selectedBounty.relayStatus ?? "Not prepared"}</Text>
-                  </Text>
-                  {selectedBounty.txHash ? (
-                    <Space direction="vertical" size={4}>
-                      <Text className="!text-[#555555]">Transaction hash</Text>
-                      <Paragraph
-                        className="!mb-0 max-w-full !text-[#555555]"
-                        copyable={{ text: selectedBounty.txHash }}
-                        ellipsis={{ rows: 1, expandable: false }}
-                      >
-                        {selectedBounty.txHash}
-                      </Paragraph>
-                      {getExplorerTxUrl(selectedBounty.txHash) ? (
-                        <Button
-                          className="artisan-ghost-button"
-                          href={getExplorerTxUrl(selectedBounty.txHash)}
-                          target="_blank"
-                          type="default"
+                    {selectedBounty.txHash ? (
+                      <Space direction="vertical" size={4}>
+                        <Text className="!text-[#555555]">Transaction hash</Text>
+                        <Paragraph
+                          className="!mb-0 max-w-full !text-[#555555]"
+                          copyable={{ text: selectedBounty.txHash }}
+                          ellipsis={{ rows: 1, expandable: false }}
                         >
-                          View on explorer
-                        </Button>
-                      ) : null}
-                    </Space>
-                  ) : null}
-                </Space>
-              </Card>
-            </>
-          )}
+                          {selectedBounty.txHash}
+                        </Paragraph>
+                        {getExplorerTxUrl(selectedBounty.txHash) ? (
+                          <Button
+                            className="artisan-ghost-button"
+                            href={getExplorerTxUrl(selectedBounty.txHash)}
+                            target="_blank"
+                            type="default"
+                          >
+                            View on explorer
+                          </Button>
+                        ) : null}
+                      </Space>
+                    ) : null}
+                  </Space>
+                </Card>
+              </>
+            )}
 
-          {detailDrawerMode === "review" ? (
-          <Card className="artisan-muted-card" title="Integration map">
-            <Timeline
-              items={[
-                {
-                  color: "#443199",
-                  children:
-                    "MetaMask: connect admin wallet and request Advanced Permission or create a smart account.",
-                },
-                {
-                  color: "#443199",
-                  children:
-                    "OpenAI: score the learner submission and return structured JSON for the admin.",
-                },
-                {
-                  color: "#443199",
-                  children:
-                    "1Shot: quote and relay the ERC-7710 USDC transfer so the payout avoids native gas friction.",
-                },
-                {
-                  color: "#443199",
-                  children:
-                    "Persist bounties, resources, AI review output, and transaction hashes in MongoDB.",
-                },
-              ]}
-            />
-            <Steps
-              className="mt-4"
-              current={
-                isSelectedBountyPaid
-                  ? 2
-                  : getLifecycleLabel(selectedBounty) === "Ready"
-                    ? 2
-                    : getLifecycleLabel(selectedBounty) === "Reviewing"
-                      ? 1
-                      : 0
-              }
-              direction="vertical"
-              items={[
-                { title: "Bounty open" },
-                { title: "Deadline/manual end reached" },
-                { title: "Funds disbursed through delegation" },
-              ]}
-            />
-          </Card>
-          ) : null}
-        </Space>
+            {detailDrawerMode === "review" ? (
+              <Card className="artisan-muted-card" title="Integration map">
+                <Timeline
+                  items={[
+                    {
+                      color: "#443199",
+                      children:
+                        "MetaMask: connect admin wallet and request Advanced Permission or create a smart account.",
+                    },
+                    {
+                      color: "#443199",
+                      children:
+                        "OpenAI: score the learner submission and return structured JSON for the admin.",
+                    },
+                    {
+                      color: "#443199",
+                      children:
+                        "1Shot: quote and relay the ERC-7710 USDC transfer so the payout avoids native gas friction.",
+                    },
+                    {
+                      color: "#443199",
+                      children:
+                        "Persist bounties, resources, AI review output, and transaction hashes.",
+                    },
+                  ]}
+                />
+                <Steps
+                  className="mt-4"
+                  current={
+                    isSelectedBountyPaid
+                      ? 2
+                      : getLifecycleLabel(selectedBounty) === "Ready"
+                        ? 2
+                        : getLifecycleLabel(selectedBounty) === "Reviewing"
+                          ? 1
+                          : 0
+                  }
+                  direction="vertical"
+                  items={[
+                    { title: "Bounty open" },
+                    { title: "Deadline/manual end reached" },
+                    { title: "Funds disbursed through delegation" },
+                  ]}
+                />
+              </Card>
+            ) : null}
+          </Space>
         ) : null}
       </Drawer>
     </main>
