@@ -1728,7 +1728,10 @@ export default function Home() {
             </div>
 
             <Row gutter={[16, 16]} justify="start">
-              {bounties.map((bounty) => (
+              {bounties.map((bounty) => {
+                const isCurrentUserBountyCreator = isBountyCreator(bounty);
+
+                return (
                 <Col key={bounty.id} xs={24} sm={12} lg={8} xl={8}>
                   <Card
                     bordered={false}
@@ -1741,11 +1744,12 @@ export default function Home() {
                     title={bounty.id}
                   >
                     <button
-                      className="mb-4 block w-full text-left"
+                      className="mb-4 block w-full text-left disabled:cursor-not-allowed disabled:opacity-70"
+                      disabled={!isConnected}
                       onClick={() =>
                         openBounty(
                           bounty.id,
-                          isBountyCreator(bounty) ? "review" : "open",
+                          isCurrentUserBountyCreator ? "review" : "open",
                         )
                       }
                       type="button"
@@ -1796,24 +1800,29 @@ export default function Home() {
                     <Divider className="!my-3 !border-[#443199]/80" />
 
                     <div className="flex justify-end gap-2">
-                      {!isBountyCreator(bounty) ? (
+                      {!isCurrentUserBountyCreator ? (
                         <Button
                           className="artisan-ghost-button"
+                          disabled={!isConnected}
                           onClick={() => openBounty(bounty.id, "open")}
                         >
                           Open
                         </Button>
                       ) : null}
-                      <Button
-                        type="primary"
-                        onClick={() => openBounty(bounty.id, "review")}
-                      >
-                        Review
-                      </Button>
+                      {isCurrentUserBountyCreator ? (
+                        <Button
+                          disabled={!isConnected}
+                          type="primary"
+                          onClick={() => openBounty(bounty.id, "review")}
+                        >
+                          Review
+                        </Button>
+                      ) : null}
                     </div>
                   </Card>
                 </Col>
-              ))}
+                );
+              })}
             </Row>
           </section>
         )}
