@@ -1,16 +1,16 @@
 # Artisan
 
-Artisan is a SkillBounty Board for learning communities. Admins post small tasks, learners submit proof of work, pay for AI review through an x402-style `402 Payment Required` flow, and approved rewards are paid from a MetaMask Smart Account through 1Shot gas abstraction.
+Artisan is a task board for learning communities. Organizers create tasks, learners submit proof of work, Organizers pay a little fee to access AI-supported review through an x402-style 402 Payment Required flow, and approved rewards are paid from a MetaMask Smart Account through 1Shot gas abstraction.
 
 ## MVP Flow
 
 ```txt
 Create bounty
 -> Learner submits work
--> AI review endpoint returns 402 Payment Required
+-> Organizer starts AI-supported review (Platform Displays 402 Payment Required before running the AI Review)
 -> MetaMask Advanced Permission authorizes the x402 review payment
 -> 1Shot relays the ERC-7710 payment transaction
--> OpenAI scores and summarizes the submission
+-> Our Dedicated AI scores and summarizes the submission
 -> Admin approves the payout
 -> MetaMask Smart Account executes the USDC transfer
 -> 1Shot relays the ERC-7710 transaction
@@ -71,6 +71,15 @@ Next implementation steps:
 2. Add MongoDB persistence for the returned 1Shot task ID, status, and final transaction hash.
 3. Replace manual relay status checking with automatic polling or a webhook endpoint.
 
+## How Payments Work
+
+Artisan uses MetaMask Advanced Permissions, x402-style review payments, ERC-7710 delegated execution, and the 1Shot API together:
+
+- **MetaMask Advanced Permissions**: the admin connects MetaMask and grants a capped USDC allowance permission to the 1Shot relayer target. The app stores the returned permission context locally so later review payments and bounty payouts can be executed from the admin's MetaMask Smart Account without asking for a new signature every time.
+- **x402 review payment**: `/api/openai/review` is protected by a payment step. If the admin has not paid, the endpoint returns `402 Payment Required` with the USDC amount and seller wallet. The client pays that fee, stores an `X-Payment` proof like `oneshot:<taskId>`, then retries the OpenAI review request with that proof.
+- **ERC-7710 / 7715 execution**: MetaMask returns the permission context using Advanced Permissions, and the app sends that context plus encoded ERC-20 calls to `/api/oneshot/send-7710`. The server decodes the delegation context and submits the transaction bundle through `relayer_send7710Transaction`.
+- **1Shot API**: the app uses 1Shot to discover supported relayer capabilities, quote fees, submit delegated transaction bundles, and check task status. For payouts, the single `Initiate payout via 1Shot` button first prepares the USDC transfer calldata and fee quote, then immediately submits the prepared bundle to 1Shot. The returned task ID, relay status, and onchain transaction hash are saved on the bounty and shown in the drawer.
+
 ## Current Sponsor Flow
 
 ```txt
@@ -88,9 +97,9 @@ Connect MetaMask
    - Retries `/api/openai/review` with `X-Payment: oneshot:<taskId>`.
 -> Prepare 1Shot payout
    - Fetches 1Shot fee data.
-   - Encodes USDC.transfer(learner, reward).
+   - Encodes the selected USDC.transfer(learner, reward) calls.
    - Stores permission context, delegation manager, fee quote, and calldata for relay submission.
--> Submit to 1Shot
+-> Initiate payout via 1Shot
    - Decodes MetaMask's permission context into the delegation array expected by 1Shot.
    - Calls relayer_send7710Transaction.
    - Stores the returned task ID.

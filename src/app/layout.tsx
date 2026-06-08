@@ -10,7 +10,7 @@ const montserrat = Montserrat({
 });
 
 export const metadata: Metadata = {
-  title: "Artisan | SkillBounty Board",
+  title: "Artisan",
   description:
     "A community bounty board for AI-reviewed learner tasks and smart-account payouts.",
 };

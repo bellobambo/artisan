@@ -4,6 +4,7 @@ import {
   Alert,
   Button,
   Card,
+  Checkbox,
   Col,
   Divider,
   Drawer,
@@ -55,10 +56,21 @@ const x402SellerAddress = process.env.NEXT_PUBLIC_X402_SELLER_ADDRESS as
   | `0x${string}`
   | undefined;
 const smartPermissionStoragePrefix = "artisan.smartPermissionGrant";
+const smartPermissionAllowanceUsdc =
+  process.env.NEXT_PUBLIC_SMART_PERMISSION_ALLOWANCE_USDC ?? "1000";
+const blockExplorerUrl = appChain.blockExplorers?.default.url;
 
 type BountyStatus = "Open" | "Reviewing" | "Ready" | "Paid" | "Ended";
 type PayoutMode = "Even Split" | "Ranked Positions";
 type DetailDrawerMode = "open" | "review";
+type ReviewFlowStep =
+  | "idle"
+  | "quote"
+  | "relay"
+  | "proof"
+  | "review"
+  | "ranking"
+  | "complete";
 
 type BountySubmission = {
   id: string;
@@ -71,6 +83,7 @@ type BountySubmission = {
   aiIssues?: string[];
   aiRecommendation?: "Approve" | "Revise" | "Reject";
   rank?: number;
+  selectedForPayout?: boolean;
 };
 
 type AdvancedPermissionGrant = {
@@ -145,10 +158,17 @@ type Bounty = {
   relayTaskId?: string;
   relayStatus?: string;
   relayFeeQuote?: OneShotFeeQuote;
-  relayCalldata?: `0x${string}`;
+  relayCalldata?: `0x${string}` | null;
+  relayCalldatas?: `0x${string}`[];
   x402ReviewTaskId?: string;
   x402ReviewStatus?: string;
   x402PaymentProof?: string;
+};
+
+type PreparedRelayPayout = {
+  relayFeeQuote: OneShotFeeQuote;
+  relayCalldata: `0x${string}`;
+  relayCalldatas: `0x${string}`[];
 };
 
 const communityOptions = [
@@ -266,6 +286,7 @@ function normalizeBounty(bounty: Partial<Bounty>): Bounty {
     relayStatus: bounty.relayStatus,
     relayFeeQuote: bounty.relayFeeQuote,
     relayCalldata: bounty.relayCalldata,
+    relayCalldatas: bounty.relayCalldatas,
     x402ReviewTaskId: bounty.x402ReviewTaskId,
     x402ReviewStatus: bounty.x402ReviewStatus,
     x402PaymentProof: bounty.x402PaymentProof,
@@ -284,10 +305,18 @@ function getReviewEndsAt(bounty: Bounty) {
 }
 
 function isBountyEnded(bounty: Bounty) {
+  if (bounty.status === "Paid") {
+    return true;
+  }
+
   return Boolean(bounty.endedAt) || Date.now() >= new Date(bounty.deadlineAt).getTime();
 }
 
 function isReviewPeriodDone(bounty: Bounty) {
+  if (bounty.status === "Paid") {
+    return true;
+  }
+
   return isBountyEnded(bounty) && Date.now() >= getReviewEndsAt(bounty).getTime();
 }
 
@@ -308,7 +337,12 @@ function getLifecycleLabel(bounty: Bounty) {
 }
 
 function getPayoutRows(bounty: Bounty) {
-  const ranked = getSortedSubmissions(bounty).slice(0, bounty.participantLimit);
+  const ranked = getSortedSubmissions(bounty)
+    .filter(
+      (submission) =>
+        typeof submission.aiScore === "number" && submission.selectedForPayout,
+    )
+    .slice(0, bounty.participantLimit);
 
   if (!ranked.length) {
     return [];
@@ -333,6 +367,47 @@ function getPayoutRows(bounty: Bounty) {
   }));
 }
 
+function getReviewFlowStepIndex(step: ReviewFlowStep) {
+  return {
+    idle: 0,
+    quote: 0,
+    relay: 1,
+    proof: 2,
+    review: 3,
+    ranking: 4,
+    complete: 4,
+  }[step];
+}
+
+function getReviewFlowItemStatus(
+  itemIndex: number,
+  currentStep: ReviewFlowStep,
+): "wait" | "process" | "finish" {
+  if (currentStep === "idle") {
+    return "wait";
+  }
+
+  const currentIndex = getReviewFlowStepIndex(currentStep);
+
+  if (itemIndex < currentIndex || currentStep === "complete") {
+    return "finish";
+  }
+
+  if (itemIndex === currentIndex) {
+    return "process";
+  }
+
+  return "wait";
+}
+
+function getExplorerTxUrl(txHash?: string) {
+  if (!txHash || !blockExplorerUrl) {
+    return undefined;
+  }
+
+  return `${blockExplorerUrl}/tx/${txHash}`;
+}
+
 export default function Home() {
   const [bounties, setBounties] = useState<Bounty[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -350,6 +425,7 @@ export default function Home() {
   const [isSubmittingRelay, setIsSubmittingRelay] = useState(false);
   const [isCheckingRelay, setIsCheckingRelay] = useState(false);
   const [isPayingX402, setIsPayingX402] = useState(false);
+  const [reviewFlowStep, setReviewFlowStep] = useState<ReviewFlowStep>("idle");
   const [permissionGrant, setPermissionGrant] =
     useState<AdvancedPermissionGrant | null>(null);
   const { address, chainId, isConnected } = useAccount();
@@ -383,7 +459,7 @@ export default function Home() {
   );
   const isSmartPermissionActive = Boolean(permissionGrant);
   const canRequestSmartPermission =
-    hasMounted && isConnected && !isSmartPermissionActive;
+    hasMounted && isConnected;
   const nativeBalanceLabel = formatWalletBalance(
     nativeBalance.data
       ? formatUnits(nativeBalance.data.value, nativeBalance.data.decimals)
@@ -394,11 +470,20 @@ export default function Home() {
     typeof usdcBalance.data === "bigint" ? formatUnits(usdcBalance.data, 6) : undefined,
     "USDC",
   );
+  const connectedWallet = address?.toLowerCase();
 
   const selectedBounty = useMemo(
     () => bounties.find((bounty) => bounty.id === selectedId) ?? bounties[0],
     [bounties, selectedId],
   );
+  const isSelectedBountyPaid = selectedBounty?.status === "Paid";
+  const isSelectedBountyCreator = Boolean(
+    selectedBounty?.creator &&
+      connectedWallet &&
+      selectedBounty.creator.toLowerCase() === connectedWallet,
+  );
+  const isSelectedBountyManageable =
+    Boolean(selectedBounty) && isSelectedBountyCreator && !isSelectedBountyPaid;
   const [defaultDeadlineInput] = useState(() =>
       toDateTimeInputValue(
         new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(),
@@ -514,9 +599,47 @@ export default function Home() {
     };
   }, []);
 
+  function isBountyCreator(bounty: Bounty) {
+    return Boolean(
+      bounty.creator &&
+        connectedWallet &&
+        bounty.creator.toLowerCase() === connectedWallet,
+    );
+  }
+
+  async function persistBountyPatch(
+    bountyId: string,
+    patch: Partial<Bounty>,
+  ) {
+    const response = await fetch(`/api/bounties/${encodeURIComponent(bountyId)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    const result = (await response.json()) as {
+      bounty?: Bounty;
+      error?: string;
+    };
+
+    if (!response.ok) {
+      throw new Error(result.error ?? "Failed to update bounty");
+    }
+
+    const updatedBounty = result.bounty;
+
+    if (updatedBounty) {
+      setBounties((current) =>
+        current.map((bounty) =>
+          bounty.id === bountyId ? normalizeBounty(updatedBounty) : bounty,
+        ),
+      );
+    }
+  }
+
   function openBounty(bountyId: string, mode: DetailDrawerMode = "open") {
     setSelectedId(bountyId);
     setDetailDrawerMode(mode);
+    setReviewFlowStep("idle");
     setIsDetailDrawerOpen(true);
   }
 
@@ -672,6 +795,7 @@ export default function Home() {
     setIsPayingX402(true);
 
     try {
+      setReviewFlowStep("quote");
       const capabilities = await fetchOneShotCapabilities();
       const feeToken = pickPaymentToken(capabilities);
 
@@ -696,6 +820,7 @@ export default function Home() {
         functionName: "transfer",
         args: [payTo, parseUnits(amount, 6)],
       });
+      setReviewFlowStep("relay");
       const response = await fetch("/api/oneshot/send-7710", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -722,20 +847,25 @@ export default function Home() {
       }
 
       const proof = `oneshot:${result.taskId}`;
+      setReviewFlowStep("proof");
+      const reviewPaymentPatch: Partial<Bounty> = {
+        x402PaymentProof: proof,
+        x402ReviewTaskId: result.taskId,
+        x402ReviewStatus: `Paid ${amount} USDC for AI review access`,
+        relayFeeQuote: feeQuote,
+      };
 
       setBounties((current) =>
         current.map((bounty) =>
           bounty.id === selectedBounty.id
             ? {
                 ...bounty,
-                x402PaymentProof: proof,
-                x402ReviewTaskId: result.taskId,
-                x402ReviewStatus: `Paid ${amount} USDC for AI review access`,
-                relayFeeQuote: feeQuote,
+                ...reviewPaymentPatch,
               }
             : bounty,
         ),
       );
+      await persistBountyPatch(selectedBounty.id, reviewPaymentPatch);
 
       toast.success(
         `x402 payment relayed through 1Shot for ${submission.id}`,
@@ -746,7 +876,7 @@ export default function Home() {
     }
   }
 
-  async function runAiReview() {
+  async function runAiReview(paymentProof = selectedBounty?.x402PaymentProof) {
     if (!selectedBounty) {
       toast("Create a bounty before running AI review");
       return;
@@ -757,9 +887,15 @@ export default function Home() {
       return;
     }
 
+    if (!paymentProof) {
+      toast("Pay the review fee before running AI review");
+      return;
+    }
+
     setIsReviewing(true);
 
     try {
+      setReviewFlowStep("review");
       const reviewedSubmissions: BountySubmission[] = [];
 
       for (const submission of selectedBounty.submissions) {
@@ -779,8 +915,14 @@ export default function Home() {
 
         const response = await fetch("/api/openai/review", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(reviewPayload),
+          headers: {
+            "Content-Type": "application/json",
+            "X-Payment": paymentProof,
+          },
+          body: JSON.stringify({
+            ...reviewPayload,
+            x402PaymentProof: paymentProof,
+          }),
         });
 
         const review = await response.json();
@@ -799,30 +941,40 @@ export default function Home() {
         });
       }
 
+      setReviewFlowStep("ranking");
       const rankedSubmissions = reviewedSubmissions
         .sort((left, right) => (right.aiScore ?? 0) - (left.aiScore ?? 0))
-        .map((submission, index) => ({ ...submission, rank: index + 1 }));
+        .map((submission, index) => ({
+          ...submission,
+          rank: index + 1,
+          selectedForPayout: index < 3,
+        }));
 
       const topSubmission = rankedSubmissions[0];
+      const reviewPatch: Partial<Bounty> = {
+        status: isReviewPeriodDone(selectedBounty) ? "Ready" : "Reviewing",
+        learner: topSubmission?.learner,
+        submission: topSubmission?.link,
+        submissions: rankedSubmissions,
+        aiScore: topSubmission?.aiScore,
+        aiSummary: topSubmission?.aiSummary,
+        aiStrengths: topSubmission?.aiStrengths,
+        aiIssues: topSubmission?.aiIssues,
+        aiRecommendation: topSubmission?.aiRecommendation,
+      };
 
       setBounties((current) =>
         current.map((bounty) =>
           bounty.id === selectedBounty.id
             ? {
                 ...bounty,
-                status: isReviewPeriodDone(bounty) ? "Ready" : "Reviewing",
-                learner: topSubmission?.learner,
-                submission: topSubmission?.link,
-                submissions: rankedSubmissions,
-                aiScore: topSubmission?.aiScore,
-                aiSummary: topSubmission?.aiSummary,
-                aiStrengths: topSubmission?.aiStrengths,
-                aiIssues: topSubmission?.aiIssues,
-                aiRecommendation: topSubmission?.aiRecommendation,
+                ...reviewPatch,
               }
             : bounty,
         ),
       );
+      await persistBountyPatch(selectedBounty.id, reviewPatch);
+      setReviewFlowStep("complete");
       toast.success("OpenAI review and ranking completed");
     } catch (error) {
       toast.error(
@@ -839,17 +991,15 @@ export default function Home() {
       return;
     }
 
-    const reviewedSubmission = getSortedSubmissions(selectedBounty).find(
-      (submission) => typeof submission.aiScore === "number",
-    );
+    const payableSubmission = selectedBounty.submissions[0];
 
-    if (!reviewedSubmission) {
-      toast("Run AI review before payment");
+    if (!payableSubmission) {
+      toast("Add a learner submission before payment");
       return;
     }
 
     try {
-      await payX402ReviewAccess(reviewedSubmission, {
+      return await payX402ReviewAccess(payableSubmission, {
         x402: {
           amount: x402ReviewPriceUsdc,
           asset: "USDC",
@@ -863,6 +1013,107 @@ export default function Home() {
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to pay review fee",
+      );
+      return undefined;
+    }
+  }
+
+  async function payAndRunAiReview() {
+    if (!selectedBounty) {
+      toast("Create a bounty before running AI review");
+      return;
+    }
+
+    if (!selectedBounty.submissions.length) {
+      toast("Add learner submissions before running AI review");
+      return;
+    }
+
+    const toastId = toast.loading("Starting review flow...");
+    setReviewFlowStep(selectedBounty.x402PaymentProof ? "proof" : "quote");
+
+    try {
+      let proof = selectedBounty.x402PaymentProof;
+
+      if (!proof) {
+        toast.loading("Paying x402 review fee...", { id: toastId });
+        proof = await payReviewFee();
+      }
+
+      if (!proof) {
+        toast.error("Review fee payment was not completed", { id: toastId });
+        setReviewFlowStep("idle");
+        return;
+      }
+
+      toast.loading("Running AI review with payment proof...", { id: toastId });
+      await runAiReview(proof);
+      toast.success("Review flow completed", { id: toastId });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Review flow failed",
+        { id: toastId },
+      );
+      setReviewFlowStep("idle");
+    }
+  }
+
+  async function toggleSubmissionPayoutSelection(
+    submissionId: string,
+    selectedForPayout: boolean,
+  ) {
+    if (!selectedBounty || !isSelectedBountyManageable) {
+      toast("Only the bounty creator can select payout winners");
+      return;
+    }
+
+    const selectedCount = selectedBounty.submissions.filter(
+      (submission) => submission.selectedForPayout,
+    ).length;
+
+    if (selectedForPayout && selectedCount >= 3) {
+      toast("Only three submissions can be selected for payout");
+      return;
+    }
+
+    const nextSubmissions = selectedBounty.submissions.map((submission) =>
+      submission.id === submissionId
+        ? { ...submission, selectedForPayout }
+        : submission,
+    );
+
+    setBounties((current) =>
+      current.map((bounty) =>
+        bounty.id === selectedBounty.id
+          ? {
+              ...bounty,
+              submissions: nextSubmissions,
+              relayStatus: bounty.relayTaskId
+                ? "Payout selection changed. Prepare payouts again before submitting."
+                : bounty.relayStatus,
+              relayTaskId: "",
+              relayCalldata: null,
+              relayCalldatas: [],
+            }
+          : bounty,
+      ),
+    );
+
+    try {
+      await persistBountyPatch(selectedBounty.id, {
+        submissions: nextSubmissions,
+        relayStatus: selectedBounty.relayTaskId
+          ? "Payout selection changed. Prepare payouts again before submitting."
+          : selectedBounty.relayStatus,
+        relayTaskId: "",
+        relayCalldata: null,
+        relayCalldatas: [],
+      });
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to update payout selection",
       );
     }
   }
@@ -906,11 +1157,6 @@ export default function Home() {
   }
 
   async function requestSmartPermission() {
-    if (isSmartPermissionActive) {
-      toast("Smart Permission is already active");
-      return;
-    }
-
     if (!isConnected || !address) {
       toast("Connect MetaMask first");
       return;
@@ -950,7 +1196,7 @@ export default function Home() {
 
       const currentTime = Math.floor(Date.now() / 1000);
       const expiresAt = currentTime + 60 * 60 * 24 * 7;
-      const allowanceAmount = parseUnits("50", 6);
+      const allowanceAmount = parseUnits(smartPermissionAllowanceUsdc, 6);
 
       const grantedPermissions = await walletClient.requestExecutionPermissions([
         {
@@ -1005,41 +1251,39 @@ export default function Home() {
     }
   }
 
-  async function approvePayout() {
+  async function preparePayout(): Promise<PreparedRelayPayout | null> {
     if (!selectedBounty) {
       toast("Create a bounty before payout");
-      return;
+      return null;
     }
 
     if (!permissionGrant || !isSmartPermissionActive) {
       toast("Request Smart Permission before payout");
-      return;
-    }
-
-    if (!selectedBounty.learner || !isAddress(selectedBounty.learner)) {
-      toast.error("Add a valid learner wallet address");
-      return;
+      return null;
     }
 
     if (!usdcAddress) {
       toast.error("NEXT_PUBLIC_USDC_ADDRESS is not configured");
-      return;
+      return null;
     }
 
     const payoutRows = getPayoutRows(selectedBounty);
-    const firstPayout = payoutRows[0];
 
-    if (!firstPayout) {
+    if (!payoutRows.length) {
       toast("There are no ranked submissions to pay");
-      return;
+      return null;
     }
 
-    if (!isAddress(firstPayout.submission.learner)) {
-      toast.error("Top ranked learner does not have a valid wallet address");
-      return;
-    }
+    const invalidRecipient = payoutRows.find(
+      (row) => !isAddress(row.submission.learner),
+    );
 
-    const payoutRecipient = firstPayout.submission.learner;
+    if (invalidRecipient) {
+      toast.error(
+        `Rank #${invalidRecipient.rank} learner does not have a valid wallet address`,
+      );
+      return null;
+    }
 
     setIsPreparingRelay(true);
 
@@ -1062,86 +1306,84 @@ export default function Home() {
         throw new Error(feeQuote.error ?? "Failed to fetch 1Shot fee quote");
       }
 
-      const transferCalldata = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: "transfer",
-        args: [payoutRecipient, parseUnits(String(firstPayout.amount), 6)],
-      });
+      const transferCalldatas: `0x${string}`[] = payoutRows.map((row) =>
+        encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [
+            row.submission.learner as `0x${string}`,
+            parseUnits(String(row.amount), 6),
+          ],
+        }),
+      );
+      const payoutPreparationPatch: Partial<Bounty> = {
+        relayStatus: `Prepared 1Shot relay bundle for ${payoutRows.length} payout${payoutRows.length === 1 ? "" : "s"}`,
+        relayFeeQuote: feeQuote,
+        relayCalldata: transferCalldatas[0],
+        relayCalldatas: transferCalldatas,
+        relayTaskId: "",
+      };
 
       setBounties((current) =>
         current.map((bounty) =>
           bounty.id === selectedBounty.id
             ? {
                 ...bounty,
-                relayStatus: "Prepared 1Shot relay bundle",
-                relayFeeQuote: feeQuote,
-                relayCalldata: transferCalldata,
+                ...payoutPreparationPatch,
               }
             : bounty,
         ),
       );
+      await persistBountyPatch(selectedBounty.id, payoutPreparationPatch);
       toast.success("1Shot fee quote and payout calldata prepared");
+      return {
+        relayFeeQuote: feeQuote,
+        relayCalldata: transferCalldatas[0],
+        relayCalldatas: transferCalldatas,
+      };
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to prepare payout",
       );
+      return null;
     } finally {
       setIsPreparingRelay(false);
     }
   }
 
-  function endBountyManually() {
+  async function endBountyManually() {
     if (!selectedBounty) {
       toast("Create a bounty before ending it");
       return;
     }
 
-    setBounties((current) =>
-      current.map((bounty) =>
-        bounty.id === selectedBounty.id
-          ? {
-              ...bounty,
-              endedAt: new Date().toISOString(),
-              status: bounty.submissions.length ? "Reviewing" : "Ended",
-            }
-          : bounty,
-      ),
-    );
-    toast.success("Bounty ended manually");
-  }
-
-  function queueAutomaticDisbursement() {
-    if (!selectedBounty) {
-      toast("Create a bounty before disbursement");
-      return;
-    }
-
-    if (!isReviewPeriodDone(selectedBounty)) {
-      toast("Review period is not complete yet");
-      return;
-    }
-
-    if (!selectedBounty.submissions.some((submission) => submission.aiScore)) {
-      toast("Run AI review before automatic disbursement");
-      return;
-    }
+    const endPatch: Partial<Bounty> = {
+      endedAt: new Date().toISOString(),
+      status: selectedBounty.submissions.length ? "Reviewing" : "Ended",
+    };
 
     setBounties((current) =>
       current.map((bounty) =>
         bounty.id === selectedBounty.id
           ? {
               ...bounty,
-              status: "Ready",
-              relayStatus:
-                "Automatic disbursement ready through smart account delegation",
+              ...endPatch,
             }
           : bounty,
       ),
     );
-    toast.success("Automatic disbursement is ready");
+
+    try {
+      await persistBountyPatch(selectedBounty.id, endPatch);
+      toast.success("Bounty ended manually");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to end bounty",
+      );
+    }
   }
 
-  async function submitRelayTransaction() {
+  async function submitRelayTransaction(preparedPayout?: PreparedRelayPayout) {
     if (!selectedBounty) {
       toast("Create a bounty before payout");
       return;
@@ -1152,7 +1394,16 @@ export default function Home() {
       return;
     }
 
-    if (!selectedBounty.relayCalldata) {
+    const payoutCalldatas =
+      preparedPayout?.relayCalldatas ??
+      selectedBounty.relayCalldatas ??
+      (preparedPayout?.relayCalldata
+        ? [preparedPayout.relayCalldata]
+        : selectedBounty.relayCalldata
+          ? [selectedBounty.relayCalldata]
+          : []);
+
+    if (!payoutCalldatas.length) {
       toast("Prepare the 1Shot payout first");
       return;
     }
@@ -1162,10 +1413,19 @@ export default function Home() {
       return;
     }
 
+    const relayFeeQuote =
+      preparedPayout?.relayFeeQuote ?? selectedBounty.relayFeeQuote;
+    const feeQuoteExpiry = Number(relayFeeQuote?.expiry);
+
+    if (Number.isFinite(feeQuoteExpiry) && feeQuoteExpiry <= Date.now() / 1000) {
+      toast("Fee quote expired. Prepare payouts again before submitting.");
+      return;
+    }
+
     setIsSubmittingRelay(true);
 
     try {
-      const feeCalldata = encodeOneShotFeeTransfer(selectedBounty.relayFeeQuote ?? {});
+      const feeCalldata = encodeOneShotFeeTransfer(relayFeeQuote ?? {});
       const response = await fetch("/api/oneshot/send-7710", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1177,12 +1437,12 @@ export default function Home() {
               target: usdcAddress,
               data: feeCalldata,
             },
-            {
+            ...payoutCalldatas.map((data) => ({
               target: usdcAddress,
-              data: selectedBounty.relayCalldata,
-            },
+              data,
+            })),
           ],
-          context: selectedBounty.relayFeeQuote?.context,
+          context: relayFeeQuote?.context,
         }),
       });
       const result = await response.json();
@@ -1190,18 +1450,28 @@ export default function Home() {
       if (!response.ok) {
         throw new Error(result.error ?? "Failed to submit 1Shot relay");
       }
+      const txHash =
+        result.receipt?.transactionHash ??
+        result.transactionHash ??
+        result.txHash ??
+        result.hash;
+      const relaySubmitPatch: Partial<Bounty> = {
+        relayTaskId: result.taskId,
+        relayStatus: "Submitted to 1Shot",
+        txHash: txHash ?? selectedBounty.txHash,
+      };
 
       setBounties((current) =>
         current.map((bounty) =>
           bounty.id === selectedBounty.id
             ? {
                 ...bounty,
-                relayTaskId: result.taskId,
-                relayStatus: "Submitted to 1Shot",
+                ...relaySubmitPatch,
               }
             : bounty,
         ),
       );
+      await persistBountyPatch(selectedBounty.id, relaySubmitPatch);
       toast.success("Submitted to 1Shot relayer");
     } catch (error) {
       toast.error(
@@ -1210,6 +1480,16 @@ export default function Home() {
     } finally {
       setIsSubmittingRelay(false);
     }
+  }
+
+  async function prepareAndSubmitRelayTransaction() {
+    const preparedPayout = await preparePayout();
+
+    if (!preparedPayout) {
+      return;
+    }
+
+    await submitRelayTransaction(preparedPayout);
   }
 
   async function checkRelayStatus() {
@@ -1245,21 +1525,38 @@ export default function Home() {
             : status.status === 100
               ? "Pending"
               : status.message ?? `Status ${status.status}`;
+      const txHash =
+        status.receipt?.transactionHash ??
+        status.transactionHash ??
+        status.txHash ??
+        status.hash;
+      const isRelayFailed =
+        typeof status.status === "number" && status.status >= 400;
+      const relayStatusPatch: Partial<Bounty> = {
+        status: status.status === 200 ? "Paid" : selectedBounty.status,
+        relayStatus: isRelayFailed
+          ? `${statusText}. Refresh Smart Permission, prepare payouts again, then submit a new 1Shot task.`
+          : statusText,
+        relayTaskId: isRelayFailed ? "" : selectedBounty.relayTaskId,
+        txHash: txHash ?? selectedBounty.txHash,
+      };
 
       setBounties((current) =>
         current.map((bounty) =>
           bounty.id === selectedBounty.id
             ? {
                 ...bounty,
-                status: status.status === 200 ? "Paid" : bounty.status,
-                relayStatus: statusText,
-                txHash:
-                  status.receipt?.transactionHash ?? status.hash ?? bounty.txHash,
+                ...relayStatusPatch,
               }
             : bounty,
         ),
       );
-      toast.success(`Relay status: ${statusText}`);
+      await persistBountyPatch(selectedBounty.id, relayStatusPatch);
+      if (isRelayFailed) {
+        toast.error(`Relay failed: ${statusText}`);
+      } else {
+        toast.success(`Relay status: ${statusText}`);
+      }
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Failed to fetch relay status",
@@ -1360,7 +1657,7 @@ export default function Home() {
               type="primary"
             >
               {isSmartPermissionActive
-                ? "Smart Permission Active"
+                ? "Refresh Smart Permission"
                 : "Request Smart Permission"}
             </Button>
             <Button
@@ -1405,7 +1702,12 @@ export default function Home() {
                 >
                   <button
                     className="mb-4 block w-full text-left"
-                    onClick={() => openBounty(bounty.id, "open")}
+                    onClick={() =>
+                      openBounty(
+                        bounty.id,
+                        isBountyCreator(bounty) ? "review" : "open",
+                      )
+                    }
                     type="button"
                   >
                     <Text className="block text-sm font-extrabold !text-[#555555]">
@@ -1454,12 +1756,14 @@ export default function Home() {
                   <Divider className="!my-3 !border-[#443199]/80" />
 
                   <div className="flex justify-end gap-2">
-                    <Button
-                      className="artisan-ghost-button"
-                      onClick={() => openBounty(bounty.id, "open")}
-                    >
-                      Open
-                    </Button>
+                    {!isBountyCreator(bounty) ? (
+                      <Button
+                        className="artisan-ghost-button"
+                        onClick={() => openBounty(bounty.id, "open")}
+                      >
+                        Open
+                      </Button>
+                    ) : null}
                     <Button
                       type="primary"
                       onClick={() => openBounty(bounty.id, "review")}
@@ -1736,7 +2040,13 @@ export default function Home() {
             <>
               <Alert
                 message="Review workflow"
-                description="Run AI review first. After the feedback is visible, use the separate payment button to pay the review fee."
+                description={
+                  isSelectedBountyPaid
+                    ? "This bounty is paid and closed."
+                    : isSelectedBountyCreator
+                      ? "The review action pays the x402 fee first, then runs AI review with the returned payment proof. Payout preparation sends all ranked bounty rewards."
+                      : "Only the bounty creator can run review and disbursement."
+                }
                 type="info"
                 showIcon
               />
@@ -1749,19 +2059,34 @@ export default function Home() {
                         key={submission.id}
                       >
                         <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <Text strong className="block !text-[#555555]">
-                              #{submission.rank ?? index + 1} {submission.learner}
-                            </Text>
-                            <a
-                              className="block truncate text-xs !text-[#443199] underline"
-                              href={submission.link}
-                              rel="noreferrer"
-                              target="_blank"
-                              title={submission.link}
-                            >
-                              {formatSubmissionLink(submission.link)}
-                            </a>
+                          <div className="flex min-w-0 gap-3">
+                            <Checkbox
+                              checked={Boolean(submission.selectedForPayout)}
+                              disabled={
+                                !isSelectedBountyManageable ||
+                                typeof submission.aiScore !== "number"
+                              }
+                              onChange={(event) =>
+                                void toggleSubmissionPayoutSelection(
+                                  submission.id,
+                                  event.target.checked,
+                                )
+                              }
+                            />
+                            <div className="min-w-0">
+                              <Text strong className="block !text-[#555555]">
+                                #{submission.rank ?? index + 1} {submission.learner}
+                              </Text>
+                              <a
+                                className="block truncate text-xs !text-[#443199] underline"
+                                href={submission.link}
+                                rel="noreferrer"
+                                target="_blank"
+                                title={submission.link}
+                              >
+                                {formatSubmissionLink(submission.link)}
+                              </a>
+                            </div>
                           </div>
                           <Text strong className="shrink-0 whitespace-nowrap !text-[#555555]">
                             {typeof submission.aiScore === "number"
@@ -1795,34 +2120,60 @@ export default function Home() {
                   ) : (
                     <Text className="!text-[#555555]">No submissions yet</Text>
                   )}
-                  <Divider className="!my-2 !border-[#443199]/80" />
-                  <Text className="!text-[#555555]">
-                    Review payment:{" "}
-                    <Text strong>
-                      {selectedBounty.x402ReviewStatus ??
-                        `${x402ReviewPriceUsdc} USDC unpaid`}
-                    </Text>
-                  </Text>
-                  <Button
-                    className="artisan-ghost-button"
-                    loading={isReviewing}
-                    onClick={runAiReview}
-                  >
-                    Run AI review
-                  </Button>
-                  <Button
-                    disabled={
-                      Boolean(selectedBounty.x402PaymentProof) ||
-                      !selectedBounty.submissions.some(
-                        (submission) => typeof submission.aiScore === "number",
-                      )
-                    }
-                    loading={isPayingX402}
-                    onClick={payReviewFee}
-                    type="primary"
-                  >
-                    Pay review fee
-                  </Button>
+                  {isSelectedBountyPaid ? null : (
+                    <>
+                      <Divider className="!my-2 !border-[#443199]/80" />
+                      <Text className="!text-[#555555]">
+                        Review payment:{" "}
+                        <Text strong>
+                          {selectedBounty.x402ReviewStatus ??
+                            `${x402ReviewPriceUsdc} USDC unpaid`}
+                        </Text>
+                      </Text>
+                      <Steps
+                        current={getReviewFlowStepIndex(reviewFlowStep)}
+                        direction="vertical"
+                        items={[
+                          {
+                            title: "Quote fee",
+                            description: "Fetch 1Shot fee and supported token.",
+                            status: getReviewFlowItemStatus(0, reviewFlowStep),
+                          },
+                          {
+                            title: "Relay payment",
+                            description: "Send x402 fee payment through 1Shot.",
+                            status: getReviewFlowItemStatus(1, reviewFlowStep),
+                          },
+                          {
+                            title: "Payment proof",
+                            description: "Store X-Payment proof for the review request.",
+                            status: getReviewFlowItemStatus(2, reviewFlowStep),
+                          },
+                          {
+                            title: "AI review",
+                            description: "Review every submission with OpenAI.",
+                            status: getReviewFlowItemStatus(3, reviewFlowStep),
+                          },
+                          {
+                            title: "Ranking",
+                            description: "Sort submissions and update scores.",
+                            status: getReviewFlowItemStatus(4, reviewFlowStep),
+                          },
+                        ]}
+                      />
+                      <Button
+                        disabled={
+                          !isSelectedBountyManageable ||
+                          !selectedBounty.submissions.length
+                        }
+                        loading={isPayingX402 || isReviewing}
+                        onClick={payAndRunAiReview}
+                        type="primary"
+                      >
+                        Pay review fee and run AI review
+                      </Button>
+                    </>
+                  )}
                 </Space>
               </Card>
 
@@ -1831,19 +2182,37 @@ export default function Home() {
                   <Text>
                     Deadline:{" "}
                     <Text strong>
-                      {isBountyEnded(selectedBounty) ? "Ended" : "Open"}
+                      {isSelectedBountyPaid
+                        ? "Closed"
+                        : isBountyEnded(selectedBounty)
+                          ? "Ended"
+                          : "Open"}
                     </Text>
                   </Text>
                   <Text>
                     Review window:{" "}
                     <Text strong>
-                      {isReviewPeriodDone(selectedBounty) ? "Complete" : "Active"}
+                      {isSelectedBountyPaid
+                        ? "Closed"
+                        : isReviewPeriodDone(selectedBounty)
+                          ? "Complete"
+                          : "Active"}
                     </Text>
                   </Text>
                   <Text>
                     Delegation:{" "}
                     <Text strong>
-                      {isSmartPermissionActive ? "Active" : "Not granted"}
+                      {isSelectedBountyPaid
+                        ? "Inactive"
+                        : isSmartPermissionActive
+                          ? "Active"
+                          : "Not granted"}
+                    </Text>
+                  </Text>
+                  <Text>
+                    Funding source:{" "}
+                    <Text strong>
+                      Creator smart account USDC balance
                     </Text>
                   </Text>
                   <Divider className="!my-2 !border-[#443199]/80" />
@@ -1866,52 +2235,64 @@ export default function Home() {
                       Payouts appear after submissions are reviewed.
                     </Text>
                   )}
-                  <Button
-                    className="artisan-ghost-button"
-                    disabled={isBountyEnded(selectedBounty)}
-                    onClick={endBountyManually}
-                  >
-                    End bounty manually
-                  </Button>
-                  <Button
-                    className="artisan-ghost-button"
-                    disabled={!isReviewPeriodDone(selectedBounty)}
-                    onClick={queueAutomaticDisbursement}
-                  >
-                    Queue automatic disbursement
-                  </Button>
-                  <Button
-                    disabled={
-                      !selectedBounty.learner ||
-                      !isSmartPermissionActive ||
-                      !getPayoutRows(selectedBounty).length
-                    }
-                    loading={isPreparingRelay}
-                    onClick={approvePayout}
-                    type="primary"
-                  >
-                    Prepare first payout
-                  </Button>
-                  <Button
-                    disabled={!selectedBounty.relayCalldata || !isSmartPermissionActive}
-                    loading={isSubmittingRelay}
-                    onClick={submitRelayTransaction}
-                    className="artisan-ghost-button"
-                    type="default"
-                  >
-                    Submit to 1Shot
-                  </Button>
-                  <Button
-                    disabled={!selectedBounty.relayTaskId}
-                    loading={isCheckingRelay}
-                    onClick={checkRelayStatus}
-                    className="artisan-ghost-button"
-                  >
-                    Check relay status
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      className="artisan-ghost-button"
+                      disabled={!isSelectedBountyManageable || isBountyEnded(selectedBounty)}
+                      onClick={endBountyManually}
+                    >
+                      End bounty manually
+                    </Button>
+                    <Button
+                      disabled={
+                        !isSelectedBountyManageable ||
+                        !isSmartPermissionActive ||
+                        !getPayoutRows(selectedBounty).length
+                      }
+                      loading={isPreparingRelay || isSubmittingRelay}
+                      onClick={prepareAndSubmitRelayTransaction}
+                      type="primary"
+                    >
+                      Initiate payout via 1Shot
+                    </Button>
+                    <Button
+                      disabled={
+                        isSelectedBountyPaid ||
+                        !isSelectedBountyCreator ||
+                        !selectedBounty.relayTaskId
+                      }
+                      loading={isCheckingRelay}
+                      onClick={checkRelayStatus}
+                      className="artisan-ghost-button"
+                    >
+                      Check relay status
+                    </Button>
+                  </div>
                   <Text className="!text-[#555555]">
                     Relay: <Text strong>{selectedBounty.relayStatus ?? "Not prepared"}</Text>
                   </Text>
+                  {selectedBounty.txHash ? (
+                    <Space direction="vertical" size={4}>
+                      <Text className="!text-[#555555]">Transaction hash</Text>
+                      <Paragraph
+                        className="!mb-0 max-w-full !text-[#555555]"
+                        copyable={{ text: selectedBounty.txHash }}
+                        ellipsis={{ rows: 1, expandable: false }}
+                      >
+                        {selectedBounty.txHash}
+                      </Paragraph>
+                      {getExplorerTxUrl(selectedBounty.txHash) ? (
+                        <Button
+                          className="artisan-ghost-button"
+                          href={getExplorerTxUrl(selectedBounty.txHash)}
+                          target="_blank"
+                          type="default"
+                        >
+                          View on explorer
+                        </Button>
+                      ) : null}
+                    </Space>
+                  ) : null}
                 </Space>
               </Card>
             </>
@@ -1946,8 +2327,8 @@ export default function Home() {
             <Steps
               className="mt-4"
               current={
-                selectedBounty.status === "Paid"
-                  ? 3
+                isSelectedBountyPaid
+                  ? 2
                   : getLifecycleLabel(selectedBounty) === "Ready"
                     ? 2
                     : getLifecycleLabel(selectedBounty) === "Reviewing"
@@ -1958,7 +2339,6 @@ export default function Home() {
               items={[
                 { title: "Bounty open" },
                 { title: "Deadline/manual end reached" },
-                { title: "AI ranked and review period complete" },
                 { title: "Funds disbursed through delegation" },
               ]}
             />
