@@ -10,7 +10,6 @@ import {
   Form,
   Input,
   InputNumber,
-  Progress,
   Row,
   Select,
   Space,
@@ -19,19 +18,27 @@ import {
   Tag,
   Timeline,
   Typography,
-  message,
 } from "antd";
 import { erc7715ProviderActions } from "@metamask/smart-accounts-kit/actions";
-import { useMemo, useState } from "react";
+import toast from "react-hot-toast";
+import { useEffect, useMemo, useState } from "react";
 import {
   createWalletClient,
   custom,
   encodeFunctionData,
   erc20Abi,
+  formatUnits,
   isAddress,
   parseUnits,
 } from "viem";
-import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
+import {
+  useAccount,
+  useBalance,
+  useConnect,
+  useDisconnect,
+  useReadContract,
+  useSwitchChain,
+} from "wagmi";
 import { appChain, appChainId, usdcAddress } from "@/lib/chain";
 
 const { Paragraph, Text, Title } = Typography;
@@ -47,9 +54,11 @@ const x402ReviewPriceUsdc =
 const x402SellerAddress = process.env.NEXT_PUBLIC_X402_SELLER_ADDRESS as
   | `0x${string}`
   | undefined;
+const smartPermissionStoragePrefix = "artisan.smartPermissionGrant";
 
 type BountyStatus = "Open" | "Reviewing" | "Ready" | "Paid" | "Ended";
 type PayoutMode = "Even Split" | "Ranked Positions";
+type DetailDrawerMode = "open" | "review";
 
 type BountySubmission = {
   id: string;
@@ -86,6 +95,13 @@ type OneShotFeeQuote = {
   minFee?: string;
   rate?: string;
   gasPrice?: string;
+  feeCollector?: `0x${string}`;
+  token?: {
+    decimals?: number | string;
+    address?: string;
+    symbol?: string;
+    name?: string;
+  };
   [key: string]: unknown;
 };
 
@@ -95,6 +111,7 @@ type X402Challenge = {
     asset?: string;
     chainId?: string;
     payTo?: string;
+    protocol?: string;
     resource?: string;
     settlement?: string;
   };
@@ -134,93 +151,6 @@ type Bounty = {
   x402PaymentProof?: string;
 };
 
-const initialBounties: Bounty[] = [
-  {
-    id: "BNT-001",
-    title: "Write a beginner guide to MetaMask Smart Accounts",
-    description:
-      "Create a practical beginner guide that explains smart account permissions and payout safety.",
-    community: "MetaMask",
-    resources:
-      "https://docs.metamask.io/smart-accounts-kit/guides/advanced-permissions/execute-on-metamask-users-behalf/",
-    reward: 8,
-    token: "USDC",
-    status: "Ready",
-    creator: "0xAdmin...001",
-    deadlineAt: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
-    reviewPeriodDays: 1,
-    participantLimit: 3,
-    payoutMode: "Ranked Positions",
-    positionRewards: [5, 2, 1],
-    learner: "0x8F3...A91",
-    submission: "https://github.com/learner/smart-account-guide",
-    submissions: [
-      {
-        id: "SUB-001",
-        learner: "0x8F3...A91",
-        link: "https://github.com/learner/smart-account-guide",
-        submittedAt: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString(),
-        aiScore: 84,
-        aiSummary:
-          "The submission introduces MetaMask Smart Accounts clearly and includes beginner-friendly examples.",
-        aiStrengths: ["Clear structure", "Relevant sponsor docs", "Practical examples"],
-        aiIssues: ["Could add a short security section"],
-        aiRecommendation: "Approve",
-        rank: 1,
-      },
-    ],
-    aiScore: 84,
-    aiSummary:
-      "The submission introduces MetaMask Smart Accounts clearly and includes beginner-friendly examples.",
-    aiStrengths: ["Clear structure", "Relevant sponsor docs", "Practical examples"],
-    aiIssues: ["Could add a short security section"],
-    aiRecommendation: "Approve",
-  },
-  {
-    id: "BNT-002",
-    title: "Create an OpenAI bounty-review prompt for community builders",
-    description:
-      "Design a structured review prompt that helps community admins score learner submissions consistently.",
-    community: "AI",
-    resources: "https://platform.openai.com/docs/guides/structured-outputs",
-    reward: 5,
-    token: "USDC",
-    status: "Reviewing",
-    creator: "0xAdmin...002",
-    deadlineAt: new Date(Date.now() + 1000 * 60 * 60 * 18).toISOString(),
-    reviewPeriodDays: 2,
-    participantLimit: 5,
-    payoutMode: "Even Split",
-    learner: "0x42B...C77",
-    submission: "https://gist.github.com/learner/openai-review-prompt",
-    submissions: [
-      {
-        id: "SUB-002",
-        learner: "0x42B...C77",
-        link: "https://gist.github.com/learner/openai-review-prompt",
-        submittedAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-      },
-    ],
-  },
-  {
-    id: "BNT-003",
-    title: "Record a 90-second explainer for ERC-7710 gas abstraction",
-    description:
-      "Record a short explainer that shows why gas abstraction matters for learner reward payouts.",
-    community: "Sui",
-    resources: "https://1shotapi.com/docs/quickstarts/gas-sponsorship-eip7710",
-    reward: 10,
-    token: "USDC",
-    status: "Open",
-    creator: "0xAdmin...003",
-    deadlineAt: new Date(Date.now() + 1000 * 60 * 60 * 72).toISOString(),
-    reviewPeriodDays: 1,
-    participantLimit: 4,
-    payoutMode: "Even Split",
-    submissions: [],
-  },
-];
-
 const communityOptions = [
   "Solana",
   "Ethereum",
@@ -257,8 +187,93 @@ function toDateTimeInputValue(value: string) {
   return value.slice(0, 16);
 }
 
+function formatSubmissionLink(value: string) {
+  try {
+    const url = new URL(value);
+    const path = `${url.hostname}${url.pathname}`.replace(/\/$/, "");
+
+    return path.length > 42 ? `${path.slice(0, 39)}...` : path;
+  } catch {
+    return value.length > 42 ? `${value.slice(0, 39)}...` : value;
+  }
+}
+
+function formatWalletBalance(value?: string, symbol?: string) {
+  if (!value || !symbol) {
+    return null;
+  }
+
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return `${value} ${symbol}`;
+  }
+
+  return `${numericValue.toLocaleString(undefined, {
+    maximumFractionDigits: numericValue >= 1 ? 4 : 6,
+  })} ${symbol}`;
+}
+
+function encodeOneShotFeeTransfer(feeQuote: OneShotFeeQuote) {
+  const feeCollector = feeQuote.feeCollector;
+
+  if (!feeCollector || !isAddress(feeCollector)) {
+    throw new Error("1Shot fee quote did not include a valid feeCollector");
+  }
+
+  if (!feeQuote.minFee) {
+    throw new Error("1Shot fee quote did not include minFee");
+  }
+
+  const decimals = Number(feeQuote.token?.decimals ?? 6);
+
+  return encodeFunctionData({
+    abi: erc20Abi,
+    functionName: "transfer",
+    args: [feeCollector, parseUnits(feeQuote.minFee, decimals)],
+  });
+}
+
+function normalizeBounty(bounty: Partial<Bounty>): Bounty {
+  return {
+    id: bounty.id ?? `BNT-${Date.now().toString(36).toUpperCase()}`,
+    title: bounty.title ?? "Untitled bounty",
+    description: bounty.description ?? "",
+    community: bounty.community ?? "Community",
+    resources: bounty.resources,
+    reward: Number(bounty.reward ?? 0),
+    token: "USDC",
+    status: bounty.status ?? "Open",
+    creator: bounty.creator,
+    deadlineAt: bounty.deadlineAt ?? new Date().toISOString(),
+    reviewPeriodDays: Number(bounty.reviewPeriodDays ?? 1),
+    participantLimit: Number(bounty.participantLimit ?? 1),
+    payoutMode: bounty.payoutMode ?? "Even Split",
+    positionRewards: Array.isArray(bounty.positionRewards)
+      ? bounty.positionRewards
+      : [],
+    endedAt: bounty.endedAt,
+    submissions: Array.isArray(bounty.submissions) ? bounty.submissions : [],
+    learner: bounty.learner,
+    submission: bounty.submission,
+    aiScore: bounty.aiScore,
+    aiSummary: bounty.aiSummary,
+    aiStrengths: bounty.aiStrengths,
+    aiIssues: bounty.aiIssues,
+    aiRecommendation: bounty.aiRecommendation,
+    txHash: bounty.txHash,
+    relayTaskId: bounty.relayTaskId,
+    relayStatus: bounty.relayStatus,
+    relayFeeQuote: bounty.relayFeeQuote,
+    relayCalldata: bounty.relayCalldata,
+    x402ReviewTaskId: bounty.x402ReviewTaskId,
+    x402ReviewStatus: bounty.x402ReviewStatus,
+    x402PaymentProof: bounty.x402PaymentProof,
+  };
+}
+
 function getSortedSubmissions(bounty: Bounty) {
-  return [...bounty.submissions].sort(
+  return [...(bounty.submissions ?? [])].sort(
     (left, right) => (right.aiScore ?? 0) - (left.aiScore ?? 0),
   );
 }
@@ -319,10 +334,16 @@ function getPayoutRows(bounty: Bounty) {
 }
 
 export default function Home() {
-  const [bounties, setBounties] = useState<Bounty[]>(initialBounties);
-  const [selectedId, setSelectedId] = useState(initialBounties[0].id);
+  const [bounties, setBounties] = useState<Bounty[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isLoadingBounties, setIsLoadingBounties] = useState(true);
+  const [isCreatingBounty, setIsCreatingBounty] = useState(false);
+  const [isSubmittingWork, setIsSubmittingWork] = useState(false);
+  const [hasMounted, setHasMounted] = useState(false);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
+  const [detailDrawerMode, setDetailDrawerMode] =
+    useState<DetailDrawerMode>("open");
   const [isReviewing, setIsReviewing] = useState(false);
   const [isRequestingPermission, setIsRequestingPermission] = useState(false);
   const [isPreparingRelay, setIsPreparingRelay] = useState(false);
@@ -331,11 +352,48 @@ export default function Home() {
   const [isPayingX402, setIsPayingX402] = useState(false);
   const [permissionGrant, setPermissionGrant] =
     useState<AdvancedPermissionGrant | null>(null);
-  const [messageApi, contextHolder] = message.useMessage();
   const { address, chainId, isConnected } = useAccount();
   const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChainAsync } = useSwitchChain();
+  const walletBalanceQueryEnabled = hasMounted && isConnected && Boolean(address);
+  const nativeBalance = useBalance({
+    address,
+    chainId: appChainId,
+    query: {
+      enabled: walletBalanceQueryEnabled,
+    },
+  });
+  const usdcBalance = useReadContract({
+    abi: erc20Abi,
+    address: usdcAddress,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    chainId: appChainId,
+    query: {
+      enabled: walletBalanceQueryEnabled && Boolean(usdcAddress),
+    },
+  });
+  const permissionStorageKey = useMemo(
+    () =>
+      address
+        ? `${smartPermissionStoragePrefix}.${appChainId}.${address.toLowerCase()}`
+        : null,
+    [address],
+  );
+  const isSmartPermissionActive = Boolean(permissionGrant);
+  const canRequestSmartPermission =
+    hasMounted && isConnected && !isSmartPermissionActive;
+  const nativeBalanceLabel = formatWalletBalance(
+    nativeBalance.data
+      ? formatUnits(nativeBalance.data.value, nativeBalance.data.decimals)
+      : undefined,
+    nativeBalance.data?.symbol,
+  );
+  const usdcBalanceLabel = formatWalletBalance(
+    typeof usdcBalance.data === "bigint" ? formatUnits(usdcBalance.data, 6) : undefined,
+    "USDC",
+  );
 
   const selectedBounty = useMemo(
     () => bounties.find((bounty) => bounty.id === selectedId) ?? bounties[0],
@@ -347,12 +405,122 @@ export default function Home() {
       ),
   );
 
-  function openBounty(bountyId: string) {
+  useEffect(() => {
+    let isCancelled = false;
+
+    queueMicrotask(() => {
+      if (!isCancelled) {
+        setHasMounted(true);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    queueMicrotask(() => {
+      if (isCancelled) {
+        return;
+      }
+
+      if (!permissionStorageKey || typeof window === "undefined") {
+        setPermissionGrant(null);
+        return;
+      }
+
+      const storedGrant = window.localStorage.getItem(permissionStorageKey);
+
+      if (!storedGrant) {
+        setPermissionGrant(null);
+        return;
+      }
+
+      try {
+        const grant = JSON.parse(storedGrant) as AdvancedPermissionGrant;
+        const hasValidGrant =
+          grant.permissionContext &&
+          grant.delegationManager &&
+          grant.relayerTargetAddress &&
+          grant.expiresAt > Date.now() / 1000;
+
+        if (hasValidGrant) {
+          setPermissionGrant(grant);
+          return;
+        }
+      } catch {
+        // Ignore invalid persisted grant data and fall back to requesting again.
+      }
+
+      window.localStorage.removeItem(permissionStorageKey);
+      setPermissionGrant(null);
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [permissionStorageKey]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadBounties() {
+      setIsLoadingBounties(true);
+
+      try {
+        const response = await fetch("/api/bounties");
+        const result = (await response.json()) as {
+          bounties?: Bounty[];
+          error?: string;
+        };
+
+        if (!response.ok) {
+          throw new Error(result.error ?? "Failed to load bounties");
+        }
+
+        if (isCancelled) {
+          return;
+        }
+
+        const nextBounties = (result.bounties ?? []).map(normalizeBounty);
+        setBounties(nextBounties);
+        setSelectedId((currentSelectedId) => {
+          if (nextBounties.some((bounty) => bounty.id === currentSelectedId)) {
+            return currentSelectedId;
+          }
+
+          return nextBounties[0]?.id ?? null;
+        });
+      } catch (error) {
+        if (!isCancelled) {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to load bounties",
+          );
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingBounties(false);
+        }
+      }
+    }
+
+    void loadBounties();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
+  function openBounty(bountyId: string, mode: DetailDrawerMode = "open") {
     setSelectedId(bountyId);
+    setDetailDrawerMode(mode);
     setIsDetailDrawerOpen(true);
   }
 
-  function addBounty(values: {
+  async function addBounty(values: {
     title: string;
     description: string;
     community: string | string[];
@@ -372,76 +540,121 @@ export default function Home() {
       values.thirdPlace ?? 0,
     ].filter((amount) => amount > 0);
 
-    const nextBounty: Bounty = {
-      id: `BNT-${String(bounties.length + 1).padStart(3, "0")}`,
-      title: values.title,
-      description: values.description,
-      community: Array.isArray(values.community)
-        ? values.community[0]
-        : values.community,
-      resources: values.resources,
-      reward: values.reward,
-      token: "USDC",
-      status: "Open",
-      creator: address,
-      deadlineAt: new Date(values.deadlineAt).toISOString(),
-      reviewPeriodDays: values.reviewPeriodDays,
-      participantLimit: values.participantLimit,
-      payoutMode:
-        values.payoutMode === "Ranked Positions" && positionRewards.length
-          ? "Ranked Positions"
-          : "Even Split",
-      positionRewards,
-      submissions: [],
-    };
+    setIsCreatingBounty(true);
 
-    setBounties((current) => [nextBounty, ...current]);
-    setSelectedId(nextBounty.id);
-    setIsCreateDrawerOpen(false);
-    setIsDetailDrawerOpen(true);
-    messageApi.success("Bounty created locally");
+    setIsSubmittingWork(true);
+
+    try {
+      const response = await fetch("/api/bounties", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: values.title,
+          description: values.description,
+          community: Array.isArray(values.community)
+            ? values.community[0]
+            : values.community,
+          resources: values.resources,
+          reward: values.reward,
+          creator: address,
+          deadlineAt: values.deadlineAt,
+          reviewPeriodDays: values.reviewPeriodDays,
+          participantLimit: values.participantLimit,
+          payoutMode: values.payoutMode,
+          positionRewards,
+        }),
+      });
+      const result = (await response.json()) as {
+        bounty?: Bounty;
+        error?: string;
+      };
+
+      if (!response.ok || !result.bounty) {
+        throw new Error(result.error ?? "Failed to create bounty");
+      }
+
+      const createdBounty = normalizeBounty(result.bounty);
+      setBounties((current) => [createdBounty, ...current]);
+      setSelectedId(createdBounty.id);
+      setIsDetailDrawerOpen(true);
+      toast.success("Bounty created in MongoDB");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to create bounty",
+      );
+    } finally {
+      setIsCreatingBounty(false);
+    }
   }
 
-  function submitWork(values: { learner: string; submission: string }) {
+  async function submitWork(values: { learner: string; submission: string }) {
+    if (!selectedBounty) {
+      toast("Create a bounty before submitting work");
+      return;
+    }
+
     if (isBountyEnded(selectedBounty)) {
-      messageApi.warning("This bounty has ended and no longer accepts submissions");
+      toast("This bounty has ended and no longer accepts submissions");
       return;
     }
 
     if (selectedBounty.submissions.length >= selectedBounty.participantLimit) {
-      messageApi.warning("This bounty has reached its participant limit");
+      toast("This bounty has reached its participant limit");
       return;
     }
 
-    const nextSubmission: BountySubmission = {
-      id: `SUB-${selectedBounty.id}-${selectedBounty.submissions.length + 1}`,
-      learner: values.learner,
-      link: values.submission,
-      submittedAt: new Date().toISOString(),
-    };
+    try {
+      const response = await fetch(
+        `/api/bounties/${encodeURIComponent(selectedBounty.id)}/submissions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(values),
+        },
+      );
+      const result = (await response.json()) as {
+        submission?: BountySubmission;
+        bounty?: Partial<Bounty>;
+        error?: string;
+      };
 
-    setBounties((current) =>
-      current.map((bounty) =>
-        bounty.id === selectedBounty.id
-          ? {
-              ...bounty,
-              learner: values.learner,
-              submission: values.submission,
-              submissions: [...bounty.submissions, nextSubmission],
-              status: "Reviewing",
-            }
-          : bounty,
-      ),
-    );
-    messageApi.success("Submission added");
+      if (!response.ok || !result.submission) {
+        throw new Error(result.error ?? "Failed to record submission");
+      }
+
+      setBounties((current) =>
+        current.map((bounty) =>
+          bounty.id === selectedBounty.id
+            ? {
+                ...bounty,
+                learner: result.bounty?.learner ?? values.learner,
+                submission: result.bounty?.submission ?? values.submission,
+                submissions: [...bounty.submissions, result.submission as BountySubmission],
+                status: "Reviewing",
+              }
+            : bounty,
+        ),
+      );
+      toast.success("Submission recorded in MongoDB");
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to record submission",
+      );
+    } finally {
+      setIsSubmittingWork(false);
+    }
   }
 
   async function payX402ReviewAccess(
     submission: BountySubmission,
     challenge: X402Challenge,
   ) {
-    if (!permissionGrant) {
-      throw new Error("Request Smart Permission before paid AI review");
+    if (!selectedBounty) {
+      throw new Error("Create a bounty before paying the review fee");
+    }
+
+    if (!permissionGrant || !isSmartPermissionActive) {
+      throw new Error("Request Smart Permission before paying the review fee");
     }
 
     if (!usdcAddress) {
@@ -477,22 +690,29 @@ export default function Home() {
         throw new Error(feeQuote.error ?? "Failed to fetch 1Shot fee quote");
       }
 
+      const feeCalldata = encodeOneShotFeeTransfer(feeQuote);
       const paymentCalldata = encodeFunctionData({
         abi: erc20Abi,
         functionName: "transfer",
         args: [payTo, parseUnits(amount, 6)],
       });
-
       const response = await fetch("/api/oneshot/send-7710", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chainId: appChainId,
           permissionContext: permissionGrant.permissionContext,
-          target: usdcAddress,
-          data: paymentCalldata,
+          executions: [
+            {
+              target: usdcAddress,
+              data: feeCalldata,
+            },
+            {
+              target: usdcAddress,
+              data: paymentCalldata,
+            },
+          ],
           context: feeQuote.context,
-          destinationUrl: "/api/openai/review",
         }),
       });
       const result = await response.json();
@@ -517,7 +737,7 @@ export default function Home() {
         ),
       );
 
-      messageApi.success(
+      toast.success(
         `x402 payment relayed through 1Shot for ${submission.id}`,
       );
       return proof;
@@ -527,8 +747,13 @@ export default function Home() {
   }
 
   async function runAiReview() {
+    if (!selectedBounty) {
+      toast("Create a bounty before running AI review");
+      return;
+    }
+
     if (!selectedBounty.submissions.length) {
-      messageApi.warning("Add learner submissions before running AI review");
+      toast("Add learner submissions before running AI review");
       return;
     }
 
@@ -552,33 +777,13 @@ export default function Home() {
           submission: submission.link,
         };
 
-        let response = await fetch("/api/openai/review", {
+        const response = await fetch("/api/openai/review", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(reviewPayload),
         });
 
-        let review = await response.json();
-
-        if (response.status === 402) {
-          const proof = await payX402ReviewAccess(
-            submission,
-            review as X402Challenge,
-          );
-
-          response = await fetch("/api/openai/review", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Payment": proof,
-            },
-            body: JSON.stringify({
-              ...reviewPayload,
-              x402PaymentProof: proof,
-            }),
-          });
-          review = await response.json();
-        }
+        const review = await response.json();
 
         if (!response.ok) {
           throw new Error(review.error ?? "OpenAI review failed");
@@ -618,13 +823,47 @@ export default function Home() {
             : bounty,
         ),
       );
-      messageApi.success("OpenAI review and ranking completed");
+      toast.success("OpenAI review and ranking completed");
     } catch (error) {
-      messageApi.error(
+      toast.error(
         error instanceof Error ? error.message : "OpenAI review failed",
       );
     } finally {
       setIsReviewing(false);
+    }
+  }
+
+  async function payReviewFee() {
+    if (!selectedBounty) {
+      toast("Create a bounty before payment");
+      return;
+    }
+
+    const reviewedSubmission = getSortedSubmissions(selectedBounty).find(
+      (submission) => typeof submission.aiScore === "number",
+    );
+
+    if (!reviewedSubmission) {
+      toast("Run AI review before payment");
+      return;
+    }
+
+    try {
+      await payX402ReviewAccess(reviewedSubmission, {
+        x402: {
+          amount: x402ReviewPriceUsdc,
+          asset: "USDC",
+          chainId: String(appChainId),
+          payTo: x402SellerAddress,
+          protocol: "x402",
+          resource: "artisan.ai-review",
+          settlement: "ERC-7710 via 1Shot",
+        },
+      });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to pay review fee",
+      );
     }
   }
 
@@ -667,19 +906,24 @@ export default function Home() {
   }
 
   async function requestSmartPermission() {
+    if (isSmartPermissionActive) {
+      toast("Smart Permission is already active");
+      return;
+    }
+
     if (!isConnected || !address) {
-      messageApi.warning("Connect MetaMask first");
+      toast("Connect MetaMask first");
       return;
     }
 
     if (!usdcAddress) {
-      messageApi.error("NEXT_PUBLIC_USDC_ADDRESS is not configured");
+      toast.error("NEXT_PUBLIC_USDC_ADDRESS is not configured");
       return;
     }
     const tokenAddress = usdcAddress;
 
     if (typeof window === "undefined" || !window.ethereum) {
-      messageApi.error("MetaMask extension was not detected");
+      toast.error("MetaMask extension was not detected");
       return;
     }
 
@@ -733,15 +977,25 @@ export default function Home() {
         throw new Error("MetaMask did not return a permission context");
       }
 
-      setPermissionGrant({
+      const nextPermissionGrant = {
         permissionContext: grant.context,
         delegationManager: grant.delegationManager,
         relayerTargetAddress,
         expiresAt,
-      });
-      messageApi.success("Advanced Permission granted");
+      };
+
+      setPermissionGrant(nextPermissionGrant);
+
+      if (permissionStorageKey && typeof window !== "undefined") {
+        window.localStorage.setItem(
+          permissionStorageKey,
+          JSON.stringify(nextPermissionGrant),
+        );
+      }
+
+      toast.success("Advanced Permission granted");
     } catch (error) {
-      messageApi.error(
+      toast.error(
         error instanceof Error
           ? error.message
           : "Failed to request Advanced Permission",
@@ -752,18 +1006,23 @@ export default function Home() {
   }
 
   async function approvePayout() {
-    if (!permissionGrant) {
-      messageApi.warning("Request Smart Permission before payout");
+    if (!selectedBounty) {
+      toast("Create a bounty before payout");
+      return;
+    }
+
+    if (!permissionGrant || !isSmartPermissionActive) {
+      toast("Request Smart Permission before payout");
       return;
     }
 
     if (!selectedBounty.learner || !isAddress(selectedBounty.learner)) {
-      messageApi.error("Add a valid learner wallet address");
+      toast.error("Add a valid learner wallet address");
       return;
     }
 
     if (!usdcAddress) {
-      messageApi.error("NEXT_PUBLIC_USDC_ADDRESS is not configured");
+      toast.error("NEXT_PUBLIC_USDC_ADDRESS is not configured");
       return;
     }
 
@@ -771,12 +1030,12 @@ export default function Home() {
     const firstPayout = payoutRows[0];
 
     if (!firstPayout) {
-      messageApi.warning("There are no ranked submissions to pay");
+      toast("There are no ranked submissions to pay");
       return;
     }
 
     if (!isAddress(firstPayout.submission.learner)) {
-      messageApi.error("Top ranked learner does not have a valid wallet address");
+      toast.error("Top ranked learner does not have a valid wallet address");
       return;
     }
 
@@ -821,9 +1080,9 @@ export default function Home() {
             : bounty,
         ),
       );
-      messageApi.success("1Shot fee quote and payout calldata prepared");
+      toast.success("1Shot fee quote and payout calldata prepared");
     } catch (error) {
-      messageApi.error(
+      toast.error(
         error instanceof Error ? error.message : "Failed to prepare payout",
       );
     } finally {
@@ -832,6 +1091,11 @@ export default function Home() {
   }
 
   function endBountyManually() {
+    if (!selectedBounty) {
+      toast("Create a bounty before ending it");
+      return;
+    }
+
     setBounties((current) =>
       current.map((bounty) =>
         bounty.id === selectedBounty.id
@@ -843,17 +1107,22 @@ export default function Home() {
           : bounty,
       ),
     );
-    messageApi.success("Bounty ended manually");
+    toast.success("Bounty ended manually");
   }
 
   function queueAutomaticDisbursement() {
+    if (!selectedBounty) {
+      toast("Create a bounty before disbursement");
+      return;
+    }
+
     if (!isReviewPeriodDone(selectedBounty)) {
-      messageApi.warning("Review period is not complete yet");
+      toast("Review period is not complete yet");
       return;
     }
 
     if (!selectedBounty.submissions.some((submission) => submission.aiScore)) {
-      messageApi.warning("Run AI review before automatic disbursement");
+      toast("Run AI review before automatic disbursement");
       return;
     }
 
@@ -869,36 +1138,50 @@ export default function Home() {
           : bounty,
       ),
     );
-    messageApi.success("Automatic disbursement is ready");
+    toast.success("Automatic disbursement is ready");
   }
 
   async function submitRelayTransaction() {
-    if (!permissionGrant) {
-      messageApi.warning("Request Smart Permission before payout");
+    if (!selectedBounty) {
+      toast("Create a bounty before payout");
+      return;
+    }
+
+    if (!permissionGrant || !isSmartPermissionActive) {
+      toast("Request Smart Permission before payout");
       return;
     }
 
     if (!selectedBounty.relayCalldata) {
-      messageApi.warning("Prepare the 1Shot payout first");
+      toast("Prepare the 1Shot payout first");
       return;
     }
 
     if (!usdcAddress) {
-      messageApi.error("NEXT_PUBLIC_USDC_ADDRESS is not configured");
+      toast.error("NEXT_PUBLIC_USDC_ADDRESS is not configured");
       return;
     }
 
     setIsSubmittingRelay(true);
 
     try {
+      const feeCalldata = encodeOneShotFeeTransfer(selectedBounty.relayFeeQuote ?? {});
       const response = await fetch("/api/oneshot/send-7710", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           chainId: appChainId,
           permissionContext: permissionGrant.permissionContext,
-          target: usdcAddress,
-          data: selectedBounty.relayCalldata,
+          executions: [
+            {
+              target: usdcAddress,
+              data: feeCalldata,
+            },
+            {
+              target: usdcAddress,
+              data: selectedBounty.relayCalldata,
+            },
+          ],
           context: selectedBounty.relayFeeQuote?.context,
         }),
       });
@@ -919,9 +1202,9 @@ export default function Home() {
             : bounty,
         ),
       );
-      messageApi.success("Submitted to 1Shot relayer");
+      toast.success("Submitted to 1Shot relayer");
     } catch (error) {
-      messageApi.error(
+      toast.error(
         error instanceof Error ? error.message : "Failed to submit relay",
       );
     } finally {
@@ -930,8 +1213,13 @@ export default function Home() {
   }
 
   async function checkRelayStatus() {
+    if (!selectedBounty) {
+      toast("Create a bounty before checking relay status");
+      return;
+    }
+
     if (!selectedBounty.relayTaskId) {
-      messageApi.warning("Submit the relay transaction first");
+      toast("Submit the relay transaction first");
       return;
     }
 
@@ -971,9 +1259,9 @@ export default function Home() {
             : bounty,
         ),
       );
-      messageApi.success(`Relay status: ${statusText}`);
+      toast.success(`Relay status: ${statusText}`);
     } catch (error) {
-      messageApi.error(
+      toast.error(
         error instanceof Error ? error.message : "Failed to fetch relay status",
       );
     } finally {
@@ -988,28 +1276,59 @@ export default function Home() {
       ) ?? connectors[0];
 
     if (!metaMaskConnector) {
-      messageApi.error("No injected wallet connector found");
+      toast.error("No injected wallet connector found");
       return;
     }
 
     connect({ connector: metaMaskConnector });
   }
 
+  async function copyWalletAddress() {
+    if (!address) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(address);
+      toast.success("Wallet address copied");
+    } catch {
+      toast.error("Could not copy wallet address");
+    }
+  }
+
   return (
     <main className="artisan-shell min-h-screen text-[#555555]">
-      {contextHolder}
       <div className="sticky top-0 z-20 border-b border-[#443199] bg-[#443199] px-4 py-3 shadow-sm sm:px-6 lg:px-8">
         <div className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-3">
           <Button className="navbar-button !font-extrabold" style={navbarButtonStyle}>
             Artisan
           </Button>
           <Space wrap className="justify-end">
-            {isConnected ? (
-              <Text className="font-bold !text-white">
+            {hasMounted && isConnected ? (
+              <Button
+                className="navbar-button"
+                onClick={copyWalletAddress}
+                style={navbarButtonStyle}
+                title="Copy wallet address"
+              >
                 {address?.slice(0, 6)}...{address?.slice(-4)}
-              </Text>
+              </Button>
             ) : null}
-            {isConnected ? (
+            {hasMounted && isConnected ? (
+              <Space size={10} wrap>
+                <Text className="font-bold !text-white">
+                  {nativeBalance.isLoading
+                    ? "ETH ..."
+                    : nativeBalanceLabel ?? "ETH unavailable"}
+                </Text>
+                <Text className="font-bold !text-white">
+                  {usdcBalance.isLoading
+                    ? "USDC ..."
+                    : usdcBalanceLabel ?? "USDC unavailable"}
+                </Text>
+              </Space>
+            ) : null}
+            {hasMounted && isConnected ? (
               <Button
                 className="navbar-button"
                 onClick={() => disconnect()}
@@ -1020,7 +1339,7 @@ export default function Home() {
             ) : (
               <Button
                 className="navbar-button"
-                loading={isPending}
+                loading={hasMounted && isPending}
                 onClick={connectMetaMask}
                 style={navbarButtonStyle}
               >
@@ -1035,24 +1354,24 @@ export default function Home() {
         <div className="flex justify-end">
           <Space wrap>
             <Button
-              disabled={!isConnected}
+              disabled={!canRequestSmartPermission}
               loading={isRequestingPermission}
               onClick={requestSmartPermission}
               type="primary"
             >
-              Request Smart Permission
+              {isSmartPermissionActive
+                ? "Smart Permission Active"
+                : "Request Smart Permission"}
             </Button>
             <Button
               className="artisan-ghost-button !bg-[#dddddd]"
-              onClick={() => setSelectedId(initialBounties[0].id)}
+              disabled={!bounties.length}
+              onClick={() => setSelectedId(bounties[0]?.id ?? null)}
             >
               Records
             </Button>
-            <Button
-              className="artisan-ghost-button !bg-[#dddddd]"
-              onClick={() => setIsCreateDrawerOpen(true)}
-            >
-              Create Bounty
+            <Button type="primary" onClick={() => setIsCreateDrawerOpen(true)}>
+              Create bounty
             </Button>
           </Space>
         </div>
@@ -1064,15 +1383,11 @@ export default function Home() {
                 Community bounties
               </Title>
               <Text className="!text-[#555555]">
-                {bounties.length} active records
+                {isLoadingBounties
+                  ? "Loading records from MongoDB"
+                  : `${bounties.length} active records`}
               </Text>
             </div>
-            <Space wrap>
-              <Tag color="#443199">MVP local state</Tag>
-              <Button type="primary" onClick={() => setIsCreateDrawerOpen(true)}>
-                Create bounty
-              </Button>
-            </Space>
           </div>
 
           <Row gutter={[16, 16]} justify="start">
@@ -1090,7 +1405,7 @@ export default function Home() {
                 >
                   <button
                     className="mb-4 block w-full text-left"
-                    onClick={() => openBounty(bounty.id)}
+                    onClick={() => openBounty(bounty.id, "open")}
                     type="button"
                   >
                     <Text className="block text-sm font-extrabold !text-[#555555]">
@@ -1141,13 +1456,13 @@ export default function Home() {
                   <div className="flex justify-end gap-2">
                     <Button
                       className="artisan-ghost-button"
-                      onClick={() => openBounty(bounty.id)}
+                      onClick={() => openBounty(bounty.id, "open")}
                     >
                       Open
                     </Button>
                     <Button
                       type="primary"
-                      onClick={() => openBounty(bounty.id)}
+                      onClick={() => openBounty(bounty.id, "review")}
                     >
                       Review
                     </Button>
@@ -1161,6 +1476,8 @@ export default function Home() {
 
       <Drawer
         destroyOnHidden
+        keyboard={false}
+        maskClosable={false}
         onClose={() => setIsCreateDrawerOpen(false)}
         open={isCreateDrawerOpen}
         placement="right"
@@ -1295,7 +1612,7 @@ export default function Home() {
               placeholder="https://docs.example.com&#10;https://github.com/community/starter"
             />
           </Form.Item>
-          <Button block htmlType="submit" type="primary">
+          <Button block htmlType="submit" loading={isCreatingBounty} type="primary">
             Create bounty
           </Button>
         </Form>
@@ -1303,18 +1620,25 @@ export default function Home() {
 
       <Drawer
         destroyOnHidden={false}
+        keyboard={false}
+        maskClosable={false}
         onClose={() => setIsDetailDrawerOpen(false)}
-        open={isDetailDrawerOpen}
+        open={Boolean(selectedBounty && isDetailDrawerOpen)}
         placement="right"
-        title={selectedBounty.title}
-        width={720}
+        title={selectedBounty?.title ?? "Bounty"}
+        width={860}
         extra={
-          <Tag color={statusColor(getLifecycleLabel(selectedBounty))}>
-            {getLifecycleLabel(selectedBounty)}
-          </Tag>
+          selectedBounty ? (
+            <Tag color={statusColor(getLifecycleLabel(selectedBounty))}>
+              {getLifecycleLabel(selectedBounty)}
+            </Tag>
+          ) : null
         }
       >
+        {selectedBounty ? (
         <Space direction="vertical" size="large" className="w-full">
+          {detailDrawerMode === "open" ? (
+            <>
           <Alert
             message="Bounty lifecycle"
             description="Users submit before the deadline, AI reviews and ranks submissions during the review period, then funds can be released manually or queued for delegated smart-account disbursement."
@@ -1396,85 +1720,112 @@ export default function Home() {
               <Button
                 className="artisan-ghost-button"
                 disabled={
+                  isSubmittingWork ||
                   isBountyEnded(selectedBounty) ||
                   selectedBounty.submissions.length >= selectedBounty.participantLimit
                 }
                 htmlType="submit"
+                loading={isSubmittingWork}
               >
                 Submit work
               </Button>
             </Form>
           </Card>
-
-          <Divider />
-
-          <Row gutter={[16, 16]}>
-            <Col xs={24} md={12}>
+            </>
+          ) : (
+            <>
+              <Alert
+                message="Review workflow"
+                description="Run AI review first. After the feedback is visible, use the separate payment button to pay the review fee."
+                type="info"
+                showIcon
+              />
               <Card className="artisan-muted-card" size="small" title="AI ranking">
                 <Space direction="vertical" className="w-full">
-                  <Progress
-                    percent={selectedBounty.aiScore ?? 0}
-                    strokeColor="#443199"
-                  />
-                  <Text>
-                    Recommendation:{" "}
-                    <Text strong>{selectedBounty.aiRecommendation ?? "Not reviewed"}</Text>
-                  </Text>
-                  <Paragraph className="!mb-0 !text-[#555555]">
-                    {selectedBounty.aiSummary ??
-                      "Run OpenAI review after a learner submits work."}
-                  </Paragraph>
-                  <Text className="!text-[#555555]">
-                    x402:{" "}
-                    <Text strong>
-                      {selectedBounty.x402ReviewStatus ??
-                        `${x402ReviewPriceUsdc} USDC required for AI review`}
-                    </Text>
-                  </Text>
-                  {selectedBounty.aiStrengths?.length ? (
-                    <Text className="!text-[#555555]">
-                      Strengths: {selectedBounty.aiStrengths.join(", ")}
-                    </Text>
-                  ) : null}
-                  {selectedBounty.aiIssues?.length ? (
-                    <Text className="!text-[#555555]">
-                      Issues: {selectedBounty.aiIssues.join(", ")}
-                    </Text>
-                  ) : null}
-                  <Divider className="!my-2 !border-[#443199]/80" />
                   {getSortedSubmissions(selectedBounty).length ? (
                     getSortedSubmissions(selectedBounty).map((submission, index) => (
                       <div
-                        className="flex items-start justify-between gap-3"
+                        className="rounded-md border border-[#443199] p-3"
                         key={submission.id}
                       >
-                        <div>
-                          <Text strong className="!text-[#555555]">
-                            #{submission.rank ?? index + 1} {submission.learner}
-                          </Text>
-                          <Text className="block text-xs !text-[#555555] opacity-75">
-                            {submission.link}
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <Text strong className="block !text-[#555555]">
+                              #{submission.rank ?? index + 1} {submission.learner}
+                            </Text>
+                            <a
+                              className="block truncate text-xs !text-[#443199] underline"
+                              href={submission.link}
+                              rel="noreferrer"
+                              target="_blank"
+                              title={submission.link}
+                            >
+                              {formatSubmissionLink(submission.link)}
+                            </a>
+                          </div>
+                          <Text strong className="shrink-0 whitespace-nowrap !text-[#555555]">
+                            {typeof submission.aiScore === "number"
+                              ? `${submission.aiScore}%`
+                              : "Pending"}
                           </Text>
                         </div>
-                        <Text strong className="!text-[#555555]">
-                          {submission.aiScore ? `${submission.aiScore}%` : "Pending"}
+                        <Text className="block pt-2 !text-[#555555]">
+                          Recommendation:{" "}
+                          <Text strong>
+                            {submission.aiRecommendation ?? "Not reviewed"}
+                          </Text>
                         </Text>
+                        {submission.aiSummary ? (
+                          <Paragraph className="!mb-0 !pt-2 !text-sm !text-[#555555]">
+                            {submission.aiSummary}
+                          </Paragraph>
+                        ) : null}
+                        {submission.aiStrengths?.length ? (
+                          <Text className="block pt-2 text-xs !text-[#555555] opacity-80">
+                            Strengths: {submission.aiStrengths.join(", ")}
+                          </Text>
+                        ) : null}
+                        {submission.aiIssues?.length ? (
+                          <Text className="block pt-1 text-xs !text-[#555555] opacity-80">
+                            Issues: {submission.aiIssues.join(", ")}
+                          </Text>
+                        ) : null}
                       </div>
                     ))
                   ) : (
                     <Text className="!text-[#555555]">No submissions yet</Text>
                   )}
+                  <Divider className="!my-2 !border-[#443199]/80" />
+                  <Text className="!text-[#555555]">
+                    Review payment:{" "}
+                    <Text strong>
+                      {selectedBounty.x402ReviewStatus ??
+                        `${x402ReviewPriceUsdc} USDC unpaid`}
+                    </Text>
+                  </Text>
                   <Button
                     className="artisan-ghost-button"
-                    loading={isReviewing || isPayingX402}
+                    loading={isReviewing}
                     onClick={runAiReview}
                   >
-                    Pay x402 and run AI review
+                    Run AI review
+                  </Button>
+                  <Button
+                    disabled={
+                      Boolean(selectedBounty.x402PaymentProof) ||
+                      !selectedBounty.submissions.some(
+                        (submission) => typeof submission.aiScore === "number",
+                      )
+                    }
+                    loading={isPayingX402}
+                    onClick={payReviewFee}
+                    type="primary"
+                  >
+                    Pay review fee
                   </Button>
                 </Space>
               </Card>
-            </Col>
-            <Col xs={24} md={12}>
+
               <Card className="artisan-muted-card" size="small" title="Disbursement">
                 <Space direction="vertical" className="w-full">
                   <Text>
@@ -1491,7 +1842,9 @@ export default function Home() {
                   </Text>
                   <Text>
                     Delegation:{" "}
-                    <Text strong>{permissionGrant ? "Granted" : "Not granted"}</Text>
+                    <Text strong>
+                      {isSmartPermissionActive ? "Active" : "Not granted"}
+                    </Text>
                   </Text>
                   <Divider className="!my-2 !border-[#443199]/80" />
                   {getPayoutRows(selectedBounty).length ? (
@@ -1530,7 +1883,7 @@ export default function Home() {
                   <Button
                     disabled={
                       !selectedBounty.learner ||
-                      !permissionGrant ||
+                      !isSmartPermissionActive ||
                       !getPayoutRows(selectedBounty).length
                     }
                     loading={isPreparingRelay}
@@ -1540,7 +1893,7 @@ export default function Home() {
                     Prepare first payout
                   </Button>
                   <Button
-                    disabled={!selectedBounty.relayCalldata}
+                    disabled={!selectedBounty.relayCalldata || !isSmartPermissionActive}
                     loading={isSubmittingRelay}
                     onClick={submitRelayTransaction}
                     className="artisan-ghost-button"
@@ -1561,9 +1914,10 @@ export default function Home() {
                   </Text>
                 </Space>
               </Card>
-            </Col>
-          </Row>
+            </>
+          )}
 
+          {detailDrawerMode === "review" ? (
           <Card className="artisan-muted-card" title="Integration map">
             <Timeline
               items={[
@@ -1609,7 +1963,9 @@ export default function Home() {
               ]}
             />
           </Card>
+          ) : null}
         </Space>
+        ) : null}
       </Drawer>
     </main>
   );

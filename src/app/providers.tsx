@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ConfigProvider } from "antd";
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { Toaster } from "react-hot-toast";
 import { WagmiProvider } from "wagmi";
 import { wagmiConfig } from "@/lib/wagmi";
 
@@ -27,7 +28,7 @@ export function Providers({ children }: { children: ReactNode }) {
               colorTextLightSolid: "#555555",
               borderRadius: 8,
               fontFamily:
-                'Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                'var(--font-montserrat), Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
             },
             components: {
               Button: {
@@ -49,6 +50,32 @@ export function Providers({ children }: { children: ReactNode }) {
           }}
         >
           {children}
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              duration: 3200,
+              style: {
+                background: "#eeeeee",
+                border: "1px solid #443199",
+                color: "#555555",
+                fontFamily:
+                  'var(--font-montserrat), Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+                fontWeight: 600,
+              },
+              success: {
+                iconTheme: {
+                  primary: "#443199",
+                  secondary: "#eeeeee",
+                },
+              },
+              error: {
+                iconTheme: {
+                  primary: "#443199",
+                  secondary: "#eeeeee",
+                },
+              },
+            }}
+          />
         </ConfigProvider>
       </QueryClientProvider>
     </WagmiProvider>

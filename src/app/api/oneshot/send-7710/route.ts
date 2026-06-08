@@ -8,6 +8,11 @@ type Send7710Request = {
   permissionContext?: `0x${string}`;
   target?: `0x${string}`;
   data?: `0x${string}`;
+  executions?: Array<{
+    target?: `0x${string}`;
+    data?: `0x${string}`;
+    value?: `0x${string}`;
+  }>;
   context?: string;
   destinationUrl?: string;
 };
@@ -26,10 +31,33 @@ function jsonSafe(value: unknown) {
 
 export async function POST(request: Request) {
   const body = (await request.json()) as Send7710Request;
+  const executions =
+    body.executions?.map((execution) => ({
+      target: execution.target,
+      value: execution.value ?? "0x0",
+      data: execution.data,
+    })) ??
+    (body.target && body.data
+      ? [
+          {
+            target: body.target,
+            value: "0x0",
+            data: body.data,
+          },
+        ]
+      : []);
 
-  if (!body.chainId || !body.permissionContext || !body.target || !body.data) {
+  if (
+    !body.chainId ||
+    !body.permissionContext ||
+    !executions.length ||
+    executions.some((execution) => !execution.target || !execution.data)
+  ) {
     return NextResponse.json(
-      { error: "chainId, permissionContext, target, and data are required" },
+      {
+        error:
+          "chainId, permissionContext, and at least one execution target/data are required",
+      },
       { status: 400 },
     );
   }
@@ -42,13 +70,7 @@ export async function POST(request: Request) {
       transactions: [
         {
           permissionContext: jsonSafe(decodedPermissionContext),
-          executions: [
-            {
-              target: body.target,
-              value: "0x0",
-              data: body.data,
-            },
-          ],
+          executions,
         },
       ],
       ...(body.context ? { context: body.context } : {}),
