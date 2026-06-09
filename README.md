@@ -38,6 +38,22 @@ Create bounty
 -> Bounty stores the final transaction hash
 ```
 
+##  Feedback
+
+
+### 1. MetaMask Smart Accounts Kit & ERC-7715
+The implementation of **Advanced Permissions** is a paradigm shift for Web3 UX. It allowed our platform to transition from a "Wallet-Centric" app to an "Agentic" app, where the software can finally act on the user's behalf without constant interruptions. The security model (scoping permissions to specific assets/amounts) is perfectly balanced. To further enhance this, future SDK versions could include helpers to map 7715 contexts directly to 7710 execution formats and provide more granular spending limit templates in the MetaMask UI (e.g., "Allow up to 5 AI reviews").
+
+### 2. 1Shot API & ERC-7710
+1Shot's "Permissionless Relayer" approach is the most seamless way to implement gas abstraction. The `relayer_send7710Transaction` endpoint is highly intuitive. A valuable addition would be a "Fee Lock" or a longer TTL for quoted fees from `relayer_getFeeData` to improve the success rate of complex, multi-step agentic transactions during high network volatility.
+
+### 3. x402 Protocol
+The **x402 protocol** is the cleanest way we've found to handle "Agentic Discovery." By returning a 402 status with structured payment metadata, our frontend was able to dynamically handle payments for various services without hardcoding prices. It turns the API into a self-documenting marketplace. We believe the ecosystem would benefit from standardized client-side interceptors that can automatically detect a 402, parse the metadata, and trigger the payment flow.
+
+### 4. Venice AI
+The **Inference Speed** and strict adherence to system prompts (especially for JSON output) are outstanding. The `venice-uncensored` model followed our complex review rubric perfectly and never failed to return a valid JSON object, which is critical for autonomous backend processing. Expanding the documentation for `venice_parameters` with more examples for structured data extraction would make it even more accessible for constrained workflows.
+
+
 ## Local Setup
 
 ```bash
@@ -70,3 +86,6 @@ Artisan uses a combination of delegative standards to automate complex workflows
 - **1Shot API**: [Gas Sponsorship & ERC-7710](https://1shotapi.com/docs/quickstarts/gas-sponsorship-eip7710)
 - **x402 Protocol**: [Agentic Payment Standards](https://x402.org)
 - **Venice AI**: [Chat Completions API](https://docs.venice.ai/api-reference/endpoint/chat/completions)
+
+---
+
