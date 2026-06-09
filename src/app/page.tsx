@@ -412,6 +412,8 @@ function getExplorerTxUrl(txHash?: string) {
 }
 
 export default function Home() {
+  const [form] = Form.useForm();
+  const payoutMode = Form.useWatch("payoutMode", form);
   const [bounties, setBounties] = useState<Bounty[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isLoadingBounties, setIsLoadingBounties] = useState(true);
@@ -419,6 +421,7 @@ export default function Home() {
   const [isSubmittingWork, setIsSubmittingWork] = useState(false);
   const [hasMounted, setHasMounted] = useState(false);
   const [isCreateDrawerOpen, setIsCreateDrawerOpen] = useState(false);
+  const [isRecordsDrawerOpen, setIsRecordsDrawerOpen] = useState(false);
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [detailDrawerMode, setDetailDrawerMode] =
     useState<DetailDrawerMode>("open");
@@ -479,6 +482,12 @@ export default function Home() {
     () => bounties.find((bounty) => bounty.id === selectedId) ?? bounties[0],
     [bounties, selectedId],
   );
+
+  const paidBounties = useMemo(
+    () => bounties.filter((b) => b.status === "Paid"),
+    [bounties]
+  );
+
   const isSelectedBountyPaid = selectedBounty?.status === "Paid";
   const isSelectedBountyCreator = Boolean(
     selectedBounty?.creator &&
@@ -668,8 +677,6 @@ export default function Home() {
 
     setIsCreatingBounty(true);
 
-    setIsSubmittingWork(true);
-
     try {
       const response = await fetch("/api/bounties", {
         method: "POST",
@@ -702,7 +709,7 @@ export default function Home() {
       const createdBounty = normalizeBounty(result.bounty);
       setBounties((current) => [createdBounty, ...current]);
       setSelectedId(createdBounty.id);
-      setIsDetailDrawerOpen(true);
+      setIsCreateDrawerOpen(false);
       toast.success("Bounty created");
     } catch (error) {
       toast.error(
@@ -728,6 +735,8 @@ export default function Home() {
       toast("This bounty has reached its participant limit");
       return;
     }
+
+    setIsSubmittingWork(true);
 
     try {
       const response = await fetch(
@@ -1701,7 +1710,7 @@ export default function Home() {
             <Button
               className="artisan-ghost-button !bg-[#dddddd]"
               disabled={!bounties.length}
-              onClick={() => setSelectedId(bounties[0]?.id ?? null)}
+              onClick={() => setIsRecordsDrawerOpen(true)}
             >
               Records
             </Button>
@@ -1745,7 +1754,7 @@ export default function Home() {
                   >
                     <button
                       className="mb-4 block w-full text-left disabled:cursor-not-allowed disabled:opacity-70"
-                      disabled={!isConnected}
+                      disabled={!isConnected || bounty.status === "Paid"}
                       onClick={() =>
                         openBounty(
                           bounty.id,
@@ -1803,7 +1812,7 @@ export default function Home() {
                       {!isCurrentUserBountyCreator ? (
                         <Button
                           className="artisan-ghost-button"
-                          disabled={!isConnected}
+                          disabled={!isConnected || bounty.status === "Paid"}
                           onClick={() => openBounty(bounty.id, "open")}
                         >
                           Open
@@ -1829,6 +1838,91 @@ export default function Home() {
       </div>
 
       <Drawer
+        onClose={() => setIsRecordsDrawerOpen(false)}
+        open={isRecordsDrawerOpen}
+        placement="right"
+        title="Payout History"
+        width={640}
+      >
+        {!paidBounties.length ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <Text className="block !text-[#555555] opacity-60">No paid records found yet.</Text>
+          </div>
+        ) : (
+          <Space direction="vertical" className="w-full" size="large">
+            {paidBounties.map((bounty) => {
+              const rows = getPayoutRows(bounty);
+              const userWin = rows.find(
+                (row) => row.submission.learner.toLowerCase() === connectedWallet
+              );
+
+              return (
+                <Card
+                  key={bounty.id}
+                  className="artisan-card artisan-muted-card"
+                  title={
+                    <div className="flex items-center justify-between">
+                      <Text strong>{bounty.title}</Text>
+                      <Tag color="success">Paid</Tag>
+                    </div>
+                  }
+                >
+                  {userWin && (
+                    <Alert
+                      showIcon
+                      className="mb-4"
+                      message={`Congratulations! You won ${userWin.amount} USDC`}
+                      type="success"
+                    />
+                  )}
+                  <div className="mb-4 flex items-center justify-between text-xs opacity-75">
+                    <Text>Community: {bounty.community}</Text>
+                    <Text>Total: {bounty.reward} {bounty.token}</Text>
+                  </div>
+                  
+                  <Divider className="!my-2" />
+                  
+                  <Title level={5} className="!mb-3 !text-sm">Winners & Payouts</Title>
+                  <div className="flex flex-col gap-3">
+                    {rows.map((row) => {
+                      const isMe = row.submission.learner.toLowerCase() === connectedWallet;
+                      return (
+                        <div key={row.submission.id} className={`flex items-center justify-between p-2 rounded-md ${isMe ? 'bg-green-50' : 'bg-gray-50'}`}>
+                          <div className="flex flex-col">
+                            <Text className="text-xs font-bold">
+                              Rank #{row.rank} {isMe && <Tag color="green" className="ml-1">You</Tag>}
+                            </Text>
+                            <Text className="text-[10px] opacity-60">{row.submission.learner}</Text>
+                          </div>
+                          <Text strong className="text-[#443199]">
+                            {row.amount} USDC
+                          </Text>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {bounty.txHash && (
+                    <div className="mt-4 pt-3 border-t text-right">
+                      <Button 
+                        type="link" 
+                        size="small" 
+                        href={getExplorerTxUrl(bounty.txHash)} 
+                        target="_blank"
+                        className="!p-0"
+                      >
+                        View Transaction
+                      </Button>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </Space>
+        )}
+      </Drawer>
+
+      <Drawer
         destroyOnHidden
         keyboard={false}
         maskClosable={false}
@@ -1839,6 +1933,7 @@ export default function Home() {
         width={560}
       >
         <Form
+          form={form}
           initialValues={{
             deadlineAt: defaultDeadlineInput,
             participantLimit: 3,
@@ -1941,23 +2036,25 @@ export default function Home() {
               ]}
             />
           </Form.Item>
-          <Row gutter={12}>
-            <Col xs={24} md={8}>
-              <Form.Item label="1st place" name="firstPlace">
-                <InputNumber addonAfter="USDC" className="!w-full" min={0} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={8}>
-              <Form.Item label="2nd place" name="secondPlace">
-                <InputNumber addonAfter="USDC" className="!w-full" min={0} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={8}>
-              <Form.Item label="3rd place" name="thirdPlace">
-                <InputNumber addonAfter="USDC" className="!w-full" min={0} />
-              </Form.Item>
-            </Col>
-          </Row>
+          {payoutMode === "Ranked Positions" && (
+            <Row gutter={12}>
+              <Col xs={24} md={8}>
+                <Form.Item label="1st place" name="firstPlace">
+                  <InputNumber addonAfter="USDC" className="!w-full" min={0} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="2nd place" name="secondPlace">
+                  <InputNumber addonAfter="USDC" className="!w-full" min={0} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label="3rd place" name="thirdPlace">
+                  <InputNumber addonAfter="USDC" className="!w-full" min={0} />
+                </Form.Item>
+              </Col>
+            </Row>
+          )}
           <Form.Item
             extra="Optional: add docs, starter repos, videos, examples, or any reference links learners should use."
             label="Resources"
@@ -2054,10 +2151,10 @@ export default function Home() {
                     <Row gutter={12}>
                       <Col xs={24} md={10}>
                         <Form.Item
-                          label="Learner wallet"
+                          label="Learner wallet (Base USDC)"
                           name="learner"
                           initialValue={selectedBounty.learner}
-                          rules={[{ required: true, message: "Add learner wallet" }]}
+                          rules={[{ required: true, message: "Add learner wallet (Base USDC)" }]}
                         >
                           <Input placeholder="0x..." />
                         </Form.Item>
@@ -2077,6 +2174,7 @@ export default function Home() {
                       className="artisan-ghost-button"
                       disabled={
                         isSubmittingWork ||
+                        selectedBounty.status === "Paid" ||
                         isBountyEnded(selectedBounty) ||
                         selectedBounty.submissions.length >= selectedBounty.participantLimit
                       }
@@ -2355,22 +2453,22 @@ export default function Home() {
                 <Timeline
                   items={[
                     {
-                      color: "#443199",
+                      color: isConnected ? "green" : "#443199",
                       children:
                         "MetaMask: connect admin wallet and request Advanced Permission or create a smart account.",
                     },
                     {
-                      color: "#443199",
+                      color: selectedBounty.aiScore ? "green" : "#443199",
                       children:
                         "OpenAI: score the learner submission and return structured JSON for the admin.",
                     },
                     {
-                      color: "#443199",
+                      color: isSelectedBountyPaid ? "green" : "#443199",
                       children:
                         "1Shot: quote and relay the ERC-7710 USDC transfer so the payout avoids native gas friction.",
                     },
                     {
-                      color: "#443199",
+                      color: "green",
                       children:
                         "Persist bounties, resources, AI review output, and transaction hashes.",
                     },
@@ -2380,7 +2478,7 @@ export default function Home() {
                   className="mt-4"
                   current={
                     isSelectedBountyPaid
-                      ? 2
+                      ? 3
                       : getLifecycleLabel(selectedBounty) === "Ready"
                         ? 2
                         : getLifecycleLabel(selectedBounty) === "Reviewing"
@@ -2390,7 +2488,7 @@ export default function Home() {
                   direction="vertical"
                   items={[
                     { title: "Bounty open" },
-                    { title: "Deadline/manual end reached" },
+                    { title: "Deadline reached" },
                     { title: "Funds disbursed through delegation" },
                   ]}
                 />
