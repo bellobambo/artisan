@@ -1,20 +1,41 @@
 # Artisan
 
-Artisan is a task board for learning communities. Organizers create tasks, learners submit proof of work, Organizers pay a little fee to access AI-supported review through an x402-style 402 Payment Required flow, and approved rewards are paid from a MetaMask Smart Account through 1Shot gas abstraction.
+Artisan is a decentralized task board for learning communities that leverages the **Agentic Economy**. Organizers create tasks, learners submit proof of work, and the platform autonomously manages AI-supported reviews and reward payouts using delegated on-chain permissions.
+
+## Key Concepts & Technologies
+
+Artisan integrates several cutting-edge protocols to create a seamless, gasless experience for community managers:
+
+### 1. **x402 (Payment Required Protocol)**
+Artisan implements the **x402 protocol** to gate premium services like AI reviews. When an organizer requests an AI score, the API returns a `402 Payment Required` status. The platform then uses delegated permissions to settle this fee autonomously, providing a "pay-as-you-go" infrastructure for AI-agentic workflows.
+
+### 2. **ERC-7715 (Advanced Permissions)**
+Using the **MetaMask Smart Accounts Kit**, Artisan requests **Advanced Permissions** from the organizer. This creates a digital "Power of Attorney" (delegation), allowing the platform to act as an agent. Once granted, Artisan can execute specific transactions (like AI fees and bounty payouts) without requiring the user to manually sign every time.
+
+### 3. **ERC-7710 (Delegated Execution)**
+This standard allows a relayer to execute instructions on behalf of a user based on a signed permission. In Artisan, all payouts are formatted as **7710 bundles**, ensuring that the user's intent is carried out securely by a third-party executor.
+
+### 4. **1Shot API & Gas Abstraction**
+Artisan uses the **1Shot Permissionless Relayer** to eliminate the need for native gas tokens (ETH). 
+*   **Gas Abstraction:** Instead of paying gas in ETH, the organizer pays the relayer a small fee in **USDC**. 
+*   **Redeem Delegations:** 1Shot "redeems" the user's delegated permissions on-chain, paying the ETH gas fee itself and claiming the user's USDC fee in return. This makes the entire application feel like a standard Web2 app where only a single stablecoin is used.
+
+---
 
 ## MVP Flow
 
 ```txt
 Create bounty
 -> Learner submits work
--> Organizer starts AI-supported review (Platform Displays 402 Payment Required before running the AI Review)
--> MetaMask Advanced Permission authorizes the x402 review payment
--> 1Shot relays the ERC-7710 payment transaction
--> Our Dedicated AI scores and summarizes the submission
+-> Organizer starts AI review 
+   - API returns x402 "Payment Required"
+-> Artisan uses Advanced Permission (ERC-7715) to authorize fee
+-> 1Shot relays the ERC-7710 fee payment
+-> AI scores and summarizes the submission
 -> Admin approves the payout
--> MetaMask Smart Account executes the USDC transfer
--> 1Shot relays the ERC-7710 transaction
--> Bounty stores the transaction hash
+-> Artisan Platform autonomously executes the USDC transfer
+-> 1Shot "Redeems" the delegation to settle the transaction gaslessly
+-> Bounty stores the final transaction hash
 ```
 
 ## Local Setup
@@ -28,124 +49,24 @@ Open `http://localhost:3000`.
 
 ## What You Need To Set Up
 
-- MetaMask browser extension with a funded test wallet.
-- Base Sepolia as the selected 1Shot-compatible test network.
-- Test USDC or another supported ERC-20 for demo rewards.
-- OpenAI API key.
-- 1Shot relayer RPC/config from the 1Shot docs.
-- x402 seller wallet address to receive paid AI review fees.
-- A public RPC URL for your selected network.
-- MongoDB Atlas or local MongoDB if you want persistent bounty data.
-
-Copy `.env.example` to `.env.local` and fill the values you have:
-
-```bash
-cp .env.example .env.local
-```
-
-For the x402 review demo, set:
-
-```bash
-NEXT_PUBLIC_X402_SELLER_ADDRESS=0xYourSellerWallet
-NEXT_PUBLIC_X402_REVIEW_PRICE_USDC=0.01
-```
-
-## Current State
-
-The current app is a local interactive prototype:
-
-- Bounty creation works in client state.
-- Learner submission works in client state.
-- OpenAI review calls the OpenAI Responses API through `/api/openai/review`.
-- `/api/openai/review` is x402-gated: the first request returns `402 Payment Required`, then the client pays the review fee and retries with an `X-Payment` proof.
-- MetaMask wallet connection works through wagmi.
-- Advanced Permissions request uses `@metamask/smart-accounts-kit` and requests a capped ERC-20 USDC allowance permission.
-- 1Shot capability discovery and fee quote calls are wired through `/api/oneshot/capabilities` and `/api/oneshot/fee`.
-- Payout preparation encodes the approved `USDC.transfer(learner, reward)` call and stores the relayer preparation state locally.
-- `relayer_send7710Transaction` is wired through `/api/oneshot/send-7710`.
-- `relayer_getStatus` is wired through `/api/oneshot/status`.
-
-Next implementation steps:
-
-1. Add MongoDB persistence for bounties, resources, submissions, reviews, and payouts.
-2. Add MongoDB persistence for the returned 1Shot task ID, status, and final transaction hash.
-3. Replace manual relay status checking with automatic polling or a webhook endpoint.
+- **MetaMask Flask 13.5.0+**: Required for Advanced Permissions.
+- **Base Sepolia**: The primary 1Shot-compatible test network.
+- **Base USDC**: `0x036CbD53842c5426634e7929541eC2318f3dCF7e` (Import this into MetaMask).
+- **OpenAI API Key**: For structured AI reviews.
+- **1Shot Relayer RPC**: Pointing to the 1Shot Base Sepolia endpoint.
 
 ## How Payments Work
 
-Artisan uses MetaMask Advanced Permissions, x402-style review payments, ERC-7710 delegated execution, and the 1Shot API together:
+Artisan uses a combination of delegative standards to automate complex workflows:
 
-- **MetaMask Advanced Permissions**: the admin connects MetaMask and grants a capped USDC allowance permission to the 1Shot relayer target. The app stores the returned permission context locally so later review payments and bounty payouts can be executed from the admin's MetaMask Smart Account without asking for a new signature every time.
-- **x402 review payment**: `/api/openai/review` is protected by a payment step. If the admin has not paid, the endpoint returns `402 Payment Required` with the USDC amount and seller wallet. The client pays that fee, stores an `X-Payment` proof like `oneshot:<taskId>`, then retries the OpenAI review request with that proof.
-- **ERC-7710 / 7715 execution**: MetaMask returns the permission context using Advanced Permissions, and the app sends that context plus encoded ERC-20 calls to `/api/oneshot/send-7710`. The server decodes the delegation context and submits the transaction bundle through `relayer_send7710Transaction`.
-- **1Shot API**: the app uses 1Shot to discover supported relayer capabilities, quote fees, submit delegated transaction bundles, and check task status. For payouts, the single `Initiate payout via 1Shot` button first prepares the USDC transfer calldata and fee quote, then immediately submits the prepared bundle to 1Shot. The returned task ID, relay status, and onchain transaction hash are saved on the bounty and shown in the drawer.
+- **MetaMask Advanced Permissions**: The admin grants a capped USDC allowance to the 1Shot relayer. The app stores the permission context locally, allowing it to "hire" AI agents and pay learners autonomously.
+- **x402 review payment**: The `/api/openai/review` endpoint is protected by a 402 gate. The client pays the fee via 1Shot, receives a proof, and retries the request.
+- **ERC-7710 execution**: The app decodes MetaMask's permission context into a format the 1Shot relayer understands, enabling the relayer to submit transaction bundles to the network on the user's behalf.
+- **Relay Status**: Artisan polls the 1Shot task status until the transaction is confirmed on-chain, at which point the final hash is saved to the bounty record.
 
-## Current Sponsor Flow
+## Sponsor & Technical Docs
 
-```txt
-Connect MetaMask
--> Request Smart Permission
-   - Fetches 1Shot relayer capabilities.
-   - Uses the returned targetAddress as the execution-permission target.
-   - Requests an ERC-20 USDC allowance permission through MetaMask Advanced Permissions.
--> Submit learner work
--> Run paid x402 OpenAI review
-   - Calls `/api/openai/review`.
-   - Receives `402 Payment Required` with the AI review price and seller address.
-   - Encodes a USDC payment to `NEXT_PUBLIC_X402_SELLER_ADDRESS`.
-   - Sends the payment through `relayer_send7710Transaction`.
-   - Retries `/api/openai/review` with `X-Payment: oneshot:<taskId>`.
--> Prepare 1Shot payout
-   - Fetches 1Shot fee data.
-   - Encodes the selected USDC.transfer(learner, reward) calls.
-   - Stores permission context, delegation manager, fee quote, and calldata for relay submission.
--> Initiate payout via 1Shot
-   - Decodes MetaMask's permission context into the delegation array expected by 1Shot.
-   - Calls relayer_send7710Transaction.
-   - Stores the returned task ID.
--> Check relay status
-   - Calls relayer_getStatus.
-   - Stores the confirmed transaction hash when status is terminal.
-```
-
-MetaMask docs note that Advanced Permissions use ERC-7715 and require the MetaMask user to be upgraded to a MetaMask Smart Account. The guide currently lists MetaMask Flask 13.5.0+ as a prerequisite for Advanced Permissions.
-
-## MongoDB Shape
-
-Use one `bounties` collection to start:
-
-```ts
-type BountyDocument = {
-  title: string;
-  community: string;
-  resources?: string;
-  rewardAmount: number;
-  rewardToken: "USDC";
-  status: "open" | "submitted" | "reviewed" | "paying" | "paid" | "failed";
-  creatorAddress?: string;
-  learnerAddress?: string;
-  submissionUrl?: string;
-  aiScore?: number;
-  aiSummary?: string;
-  aiRecommendation?: "approve" | "revise" | "reject";
-  txHash?: string;
-  relayerTaskId?: string;
-  createdAt: Date;
-  updatedAt: Date;
-};
-```
-
-Install MongoDB later with:
-
-```bash
-npm install mongodb
-```
-
-## Sponsor Docs
-
-- MetaMask Smart Accounts Kit: https://docs.metamask.io/smart-accounts-kit/
-- Delegation execution: https://docs.metamask.io/smart-accounts-kit/guides/delegation/execute-on-smart-accounts-behalf/
-- Advanced Permissions: https://docs.metamask.io/smart-accounts-kit/guides/advanced-permissions/execute-on-metamask-users-behalf/
-- 1Shot gas sponsorship: https://1shotapi.com/docs/quickstarts/gas-sponsorship-eip7710
-- OpenAI Responses API: https://platform.openai.com/docs/api-reference/responses
-- OpenAI structured outputs: https://platform.openai.com/docs/guides/structured-outputs
+- **MetaMask Smart Accounts Kit**: [Advanced Permissions Guide](https://docs.metamask.io/smart-accounts-kit/guides/advanced-permissions/execute-on-metamask-users-behalf/)
+- **1Shot API**: [Gas Sponsorship & ERC-7710](https://1shotapi.com/docs/quickstarts/gas-sponsorship-eip7710)
+- **x402 Protocol**: [Agentic Payment Standards](https://x402.org)
+- **OpenAI Responses API**: [Structured Outputs](https://platform.openai.com/docs/guides/structured-outputs)
