@@ -10,13 +10,11 @@ type ReviewRequest = {
   x402PaymentProof?: string;
 };
 
-type OpenAIResponse = {
-  output_text?: string;
-  output?: Array<{
-    content?: Array<{
-      type?: string;
-      text?: string;
-    }>;
+type VeniceResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string;
+    };
   }>;
 };
 
@@ -60,20 +58,9 @@ function parseReview(content: string) {
   };
 }
 
-function getOutputText(data: OpenAIResponse) {
-  if (typeof data.output_text === "string") {
-    return data.output_text;
-  }
-
-  return data.output
-    ?.flatMap((item) => item.content ?? [])
-    .find((content) => content.type === "output_text" && content.text)
-    ?.text;
-}
-
 export async function POST(request: Request) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  const model = process.env.OPENAI_MODEL ?? "gpt-4.1-mini";
+  const apiKey = process.env.VENICE_API_KEY;
+  const model = process.env.VENICE_MODEL ?? "venice-uncensored";
 
   if (!apiKey) {
     return NextResponse.json(
@@ -118,7 +105,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch("https://api.venice.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -126,11 +113,11 @@ export async function POST(request: Request) {
     },
     body: JSON.stringify({
       model,
-      input: [
+      messages: [
         {
           role: "system",
           content:
-            "You review learning-community bounty submissions. Be strict but constructive. Return only valid JSON.",
+            "You review learning-community bounty submissions. Be strict but constructive. Return ONLY valid JSON.",
         },
         {
           role: "user",
@@ -146,54 +133,13 @@ export async function POST(request: Request) {
             "score must be a number from 0 to 100.",
             "strengths and issues must be arrays of short strings.",
             "recommendation must be one of: approve, revise, reject.",
+            "Ensure the output is parsable JSON without markdown formatting.",
           ].join("\n"),
         },
       ],
       temperature: 0.2,
-      max_output_tokens: 500,
-      text: {
-        format: {
-          type: "json_schema",
-          name: "bounty_review",
-          strict: true,
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            required: [
-              "score",
-              "summary",
-              "strengths",
-              "issues",
-              "recommendation",
-            ],
-            properties: {
-              score: {
-                type: "number",
-                minimum: 0,
-                maximum: 100,
-              },
-              summary: {
-                type: "string",
-              },
-              strengths: {
-                type: "array",
-                items: {
-                  type: "string",
-                },
-              },
-              issues: {
-                type: "array",
-                items: {
-                  type: "string",
-                },
-              },
-              recommendation: {
-                type: "string",
-                enum: ["approve", "revise", "reject"],
-              },
-            },
-          },
-        },
+      venice_parameters: {
+        include_venice_system_prompt: false,
       },
     }),
   });
@@ -207,8 +153,8 @@ export async function POST(request: Request) {
     );
   }
 
-  const data = (await response.json()) as OpenAIResponse;
-  const content = getOutputText(data);
+  const data = (await response.json()) as VeniceResponse;
+  const content = data.choices?.[0]?.message?.content;
 
   if (typeof content !== "string") {
     return NextResponse.json(
@@ -218,7 +164,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    return NextResponse.json(parseReview(content));
+    // Attempt to strip markdown if the model included it
+    const jsonContent = content.replace(/```json\n?|\n?```/g, "").trim();
+    return NextResponse.json(parseReview(jsonContent));
   } catch {
     return NextResponse.json(
       { error: "AI service returned invalid JSON.", raw: content },

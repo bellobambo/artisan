@@ -925,7 +925,7 @@ export default function Home() {
           submission: submission.link,
         };
 
-        const response = await fetch("/api/openai/review", {
+        const response = await fetch("/api/venice/review", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
