@@ -59,7 +59,7 @@ Open `http://localhost:3000`.
 
 Artisan uses a combination of delegative standards to automate complex workflows:
 
-- **MetaMask Advanced Permissions**: The admin grants a capped USDC allowance to the 1Shot relayer. The app stores the permission context locally, allowing it to "hire" AI agents and pay learners autonomously.
+- **MetaMask Advanced Permissions**: The admin grants a capped USDC allowance to the 1Shot relayer. The app stores the permission context, allowing it to "hire" AI agents and pay learners autonomously.
 - **x402 review payment**: The `/api/venice/review` endpoint is protected by a 402 gate. The client pays the fee via 1Shot, receives a proof, and retries the request.
 - **ERC-7710 execution**: The app decodes MetaMask's permission context into a format the 1Shot relayer understands, enabling the relayer to submit transaction bundles to the network on the user's behalf.
 - **Relay Status**: Artisan polls the 1Shot task status until the transaction is confirmed on-chain, at which point the final hash is saved to the bounty record.
