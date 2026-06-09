@@ -940,7 +940,7 @@ export default function Home() {
         const review = await response.json();
 
         if (!response.ok) {
-          throw new Error(review.error ?? "OpenAI review failed");
+          throw new Error(review.error ?? "AI review failed");
         }
 
         reviewedSubmissions.push({
@@ -987,10 +987,10 @@ export default function Home() {
       );
       await persistBountyPatch(selectedBounty.id, reviewPatch);
       setReviewFlowStep("complete");
-      toast.success("OpenAI review and ranking completed");
+      toast.success("AI review and ranking completed");
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : "OpenAI review failed",
+        error instanceof Error ? error.message : "AI review failed",
       );
     } finally {
       setIsReviewing(false);
@@ -2301,7 +2301,7 @@ export default function Home() {
                             },
                             {
                               title: "AI review",
-                              description: "Review every submission with OpenAI.",
+                              description: "Review every submission with AI.",
                               status: getReviewFlowItemStatus(3, reviewFlowStep),
                             },
                             {
@@ -2460,7 +2460,7 @@ export default function Home() {
                     {
                       color: selectedBounty.aiScore ? "green" : "#443199",
                       children:
-                        "OpenAI: score the learner submission and return structured JSON for the admin.",
+                        "AI: score the learner submission and return structured JSON for the admin.",
                     },
                     {
                       color: isSelectedBountyPaid ? "green" : "#443199",

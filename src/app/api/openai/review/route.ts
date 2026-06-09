@@ -77,7 +77,7 @@ export async function POST(request: Request) {
 
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OPENAI_API_KEY is not configured." },
+      { error: "AI service is not configured." },
       { status: 500 },
     );
   }
@@ -202,7 +202,7 @@ export async function POST(request: Request) {
     const errorText = await response.text();
 
     return NextResponse.json(
-      { error: "OpenAI review failed.", details: errorText },
+      { error: "AI review failed.", details: errorText },
       { status: response.status },
     );
   }
@@ -212,7 +212,7 @@ export async function POST(request: Request) {
 
   if (typeof content !== "string") {
     return NextResponse.json(
-      { error: "OpenAI returned an unexpected response." },
+      { error: "AI service returned an unexpected response." },
       { status: 502 },
     );
   }
@@ -221,7 +221,7 @@ export async function POST(request: Request) {
     return NextResponse.json(parseReview(content));
   } catch {
     return NextResponse.json(
-      { error: "OpenAI returned invalid JSON.", raw: content },
+      { error: "AI service returned invalid JSON.", raw: content },
       { status: 502 },
     );
   }

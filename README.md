@@ -1,6 +1,6 @@
 # Artisan
 
-Artisan is a decentralized task board for learning communities that leverages the **Agentic Economy**. Organizers create tasks, learners submit proof of work, and the platform autonomously manages AI-supported reviews and reward payouts using delegated on-chain permissions.
+Artisan is a task board for learning communities. Organizers create tasks, learners submit proof of work, and the platform autonomously manages AI-supported reviews and reward payouts using delegated on-chain permissions.
 
 ## Key Concepts & Technologies
 
@@ -16,8 +16,8 @@ Using the **MetaMask Smart Accounts Kit**, Artisan requests **Advanced Permissio
 This standard allows a relayer to execute instructions on behalf of a user based on a signed permission. In Artisan, all payouts are formatted as **7710 bundles**, ensuring that the user's intent is carried out securely by a third-party executor.
 
 ### 4. **1Shot API & Gas Abstraction**
-Artisan uses the **1Shot Permissionless Relayer** to eliminate the need for native gas tokens (ETH). 
-*   **Gas Abstraction:** Instead of paying gas in ETH, the organizer pays the relayer a small fee in **USDC**. 
+Artisan uses the **1Shot Permissionless Relayer** to eliminate the need for native gas tokens (ETH).
+*   **Gas Abstraction:** Instead of paying gas in ETH, the organizer pays the relayer a small fee in **USDC**.
 *   **Redeem Delegations:** 1Shot "redeems" the user's delegated permissions on-chain, paying the ETH gas fee itself and claiming the user's USDC fee in return. This makes the entire application feel like a standard Web2 app where only a single stablecoin is used.
 
 ---
@@ -27,7 +27,7 @@ Artisan uses the **1Shot Permissionless Relayer** to eliminate the need for nati
 ```txt
 Create bounty
 -> Learner submits work
--> Organizer starts AI review 
+-> Organizer starts AI review
    - API returns x402 "Payment Required"
 -> Artisan uses Advanced Permission (ERC-7715) to authorize fee
 -> 1Shot relays the ERC-7710 fee payment
