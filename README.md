@@ -54,7 +54,21 @@ The **x402 protocol** is the cleanest way we've found to handle "Agentic Discove
 The **Inference Speed** and strict adherence to system prompts (especially for JSON output) are outstanding. The `venice-uncensored` model followed our complex review rubric perfectly and never failed to return a valid JSON object, which is critical for autonomous backend processing. Expanding the documentation for `venice_parameters` with more examples for structured data extraction would make it even more accessible for constrained workflows.
 
 
+
 ## Local Setup
+
+First, copy `.env.example` to `.env` and configure the following environment variables:
+- `VENICE_API_KEY`
+- `VENICE_MODEL`
+- `NEXT_PUBLIC_CHAIN_ID`
+- `NEXT_PUBLIC_RPC_URL`
+- `NEXT_PUBLIC_USDC_ADDRESS`
+- `NEXT_PUBLIC_ONESHOT_RPC_URL`
+- `NEXT_PUBLIC_X402_SELLER_ADDRESS`
+- `NEXT_PUBLIC_X402_REVIEW_PRICE_USDC`
+- `NEXT_PUBLIC_SMART_PERMISSION_ALLOWANCE_USDC`
+- `MONGODB_URI`
+- `MONGODB_DB`
 
 ```bash
 npm install
