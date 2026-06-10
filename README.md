@@ -59,7 +59,6 @@ The **Inference Speed** and strict adherence to system prompts (especially for J
 
 First, copy `.env.example` to `.env` and configure the following environment variables:
 - `VENICE_API_KEY`
-- `VENICE_MODEL`
 - `NEXT_PUBLIC_CHAIN_ID`
 - `NEXT_PUBLIC_RPC_URL`
 - `NEXT_PUBLIC_USDC_ADDRESS`
