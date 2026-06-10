@@ -16,7 +16,7 @@ Using the **MetaMask Smart Accounts Kit**, Artisan requests **Advanced Permissio
 This standard allows a relayer to execute instructions on behalf of a user based on a signed permission. In Artisan, all payouts are formatted as **7710 bundles**, ensuring that the user's intent is carried out securely by a third-party executor.
 
 ### 4. **1Shot API & Gas Abstraction**
-Artisan uses the **1Shot Permissionless Relayer** to eliminate the need for native gas tokens (ETH).
+Artisan uses the **1Shot Permissionless Relayer** on the **Base Sepolia** test network to eliminate the need for native gas tokens (ETH).
 *   **Gas Abstraction:** Instead of paying gas in ETH, the organizer pays the relayer a small fee in **USDC**.
 *   **Redeem Delegations:** 1Shot "redeems" the user's delegated permissions on-chain, paying the ETH gas fee itself and claiming the user's USDC fee in return. This makes the entire application feel like a standard Web2 app where only a single stablecoin is used.
 
