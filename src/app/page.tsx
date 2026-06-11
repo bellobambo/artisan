@@ -61,6 +61,9 @@ const x402SellerAddress = process.env.NEXT_PUBLIC_X402_SELLER_ADDRESS as
 const smartPermissionStoragePrefix = "artisan.smartPermissionGrant";
 const smartPermissionAllowanceUsdc =
   process.env.NEXT_PUBLIC_SMART_PERMISSION_ALLOWANCE_USDC ?? "1000";
+const oneShotFeeBufferBps = Number(
+  process.env.NEXT_PUBLIC_ONESHOT_FEE_BUFFER_BPS ?? "1500",
+);
 const blockExplorerUrl = appChain.blockExplorers?.default.url;
 
 type BountyStatus = "Open" | "Reviewing" | "Ready" | "Paid" | "Ended";
@@ -249,11 +252,21 @@ function encodeOneShotFeeTransfer(feeQuote: OneShotFeeQuote) {
   }
 
   const decimals = Number(feeQuote.token?.decimals ?? 6);
+  const minFeeAmount = parseUnits(feeQuote.minFee, decimals);
+  const feeBufferBps = Number.isFinite(oneShotFeeBufferBps)
+    ? BigInt(Math.max(0, Math.trunc(oneShotFeeBufferBps)))
+    : BigInt(0);
+  const basisPointsDenominator = BigInt(10_000);
+  const bufferedFeeAmount =
+    (minFeeAmount * (basisPointsDenominator + feeBufferBps) +
+      basisPointsDenominator -
+      BigInt(1)) /
+    basisPointsDenominator;
 
   return encodeFunctionData({
     abi: erc20Abi,
     functionName: "transfer",
-    args: [feeCollector, parseUnits(feeQuote.minFee, decimals)],
+    args: [feeCollector, bufferedFeeAmount],
   });
 }
 
@@ -1168,6 +1181,28 @@ export default function Home() {
     return tokenCandidates[0] ?? configuredUsdcAddress;
   }
 
+  async function fetchOneShotFeeQuote() {
+    const capabilities = await fetchOneShotCapabilities();
+    const feeToken = pickPaymentToken(capabilities);
+
+    if (!feeToken) {
+      throw new Error("No supported 1Shot payment token found for this chain");
+    }
+
+    const feeResponse = await fetch("/api/oneshot/fee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chainId: appChainId, token: feeToken }),
+    });
+    const feeQuote = await feeResponse.json();
+
+    if (!feeResponse.ok) {
+      throw new Error(feeQuote.error ?? "Failed to fetch 1Shot fee quote");
+    }
+
+    return feeQuote as OneShotFeeQuote;
+  }
+
   async function requestSmartPermission() {
     if (!isConnected || !address) {
       toast("Connect MetaMask first");
@@ -1300,23 +1335,7 @@ export default function Home() {
     setIsPreparingRelay(true);
 
     try {
-      const capabilities = await fetchOneShotCapabilities();
-      const feeToken = pickPaymentToken(capabilities);
-
-      if (!feeToken) {
-        throw new Error("No supported 1Shot payment token found for this chain");
-      }
-
-      const feeResponse = await fetch("/api/oneshot/fee", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chainId: appChainId, token: feeToken }),
-      });
-      const feeQuote = await feeResponse.json();
-
-      if (!feeResponse.ok) {
-        throw new Error(feeQuote.error ?? "Failed to fetch 1Shot fee quote");
-      }
+      const feeQuote = await fetchOneShotFeeQuote();
 
       const transferCalldatas: `0x${string}`[] = payoutRows.map((row) =>
         encodeFunctionData({
@@ -1425,18 +1444,20 @@ export default function Home() {
       return;
     }
 
-    const relayFeeQuote =
-      preparedPayout?.relayFeeQuote ?? selectedBounty.relayFeeQuote;
-    const feeQuoteExpiry = Number(relayFeeQuote?.expiry);
-
-    if (Number.isFinite(feeQuoteExpiry) && feeQuoteExpiry <= Date.now() / 1000) {
-      toast("Fee quote expired. Prepare payouts again before submitting.");
-      return;
-    }
-
     setIsSubmittingRelay(true);
 
     try {
+      const relayFeeQuote = await fetchOneShotFeeQuote();
+      const feeQuoteExpiry = Number(relayFeeQuote.expiry);
+
+      if (
+        Number.isFinite(feeQuoteExpiry) &&
+        feeQuoteExpiry <= Date.now() / 1000
+      ) {
+        toast("Fee quote expired. Prepare payouts again before submitting.");
+        return;
+      }
+
       const feeCalldata = encodeOneShotFeeTransfer(relayFeeQuote ?? {});
       const response = await fetch("/api/oneshot/send-7710", {
         method: "POST",
@@ -1470,6 +1491,7 @@ export default function Home() {
       const relaySubmitPatch: Partial<Bounty> = {
         relayTaskId: result.taskId,
         relayStatus: "Submitted to 1Shot",
+        relayFeeQuote,
         txHash: txHash ?? selectedBounty.txHash,
       };
 
